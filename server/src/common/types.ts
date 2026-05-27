@@ -52,4 +52,6 @@ export interface InterviewState {
   scores: { technical: number; behavioral: number; overall: number };
   messages: BaseMessage[];
   qaCount: number;
+  candidateAnswer: string;
+  resumeText?: string;
 }
