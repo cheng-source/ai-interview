@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Position {
+  id         String   @id @default(uuid())
+  title      String
+  department String
+  jdText     String
+  techStack  String[]
+  level      String
+  createdAt  DateTime @default(now())
+  candidates Candidate[]
+  interviews Interview[]
+}
+
+model Candidate {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String
+  resumeUrl    String?
+  resumeParsed Json?
+  positionId   String
+  status       String   @default("pending")
+  position     Position @relation(fields: [positionId], references: [id])
+  interviews   Interview[]
+  createdAt    DateTime @default(now())
+}
+
+model Interview {
+  id          String    @id @default(uuid())
+  candidateId String
+  positionId  String
+  threadId    String    @unique
+  stateJson   Json?
+  status      String    @default("pending")
+  startedAt   DateTime?
+  endedAt     DateTime?
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  position    Position  @relation(fields: [positionId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model CompanyDoc {
+  id         String   @id @default(uuid())
+  title      String
+  content    String
+  category   String
+  uploadedAt DateTime @default(now())
+}
