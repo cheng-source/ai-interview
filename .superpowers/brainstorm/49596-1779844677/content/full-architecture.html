@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Interview System - Full Architecture</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 32px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; color: #e6edf3; }
+  .subtitle { color: #8b949e; font-size: 14px; margin-bottom: 32px; }
+  h2 { font-size: 18px; color: #e6edf3; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
+
+  /* Layer boxes */
+  .layer {
+    border: 1px solid #30363d; border-radius: 12px; padding: 20px;
+    margin-bottom: 16px; background: #161b22;
+  }
+  .layer-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: #8b949e; margin-bottom: 16px;
+  }
+
+  /* Box styles */
+  .box-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .box {
+    border: 1px solid #30363d; border-radius: 8px;
+    background: #0d1117; flex: 1; min-width: 200px;
+  }
+  .box-header {
+    font-size: 12px; font-weight: 600; padding: 8px 12px;
+    border-bottom: 1px solid #30363d; color: #e6edf3;
+  }
+  .box-body { padding: 10px 12px; font-size: 12px; color: #8b949e; line-height: 1.5; }
+
+  /* Colors */
+  .accent-blue .box-header { background: #0d419d; }
+  .accent-green .box-header { background: #0d5e1b; }
+  .accent-purple .box-header { background: #4a0d6e; }
+  .accent-orange .box-header { background: #8b3d0a; }
+  .accent-teal .box-header { background: #0a5c53; }
+
+  /* Core highlight */
+  .core { border-color: #238636; border-width: 2px; }
+  .core .box-header { background: linear-gradient(135deg, #0d5e1b, #196c2a); }
+
+  /* Arrows */
+  .arrow-down {
+    text-align: center; font-size: 20px; color: #58a6ff;
+    padding: 4px 0;
+  }
+
+  /* Service grid */
+  .service-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  /* Details card */
+  .detail-card {
+    border: 1px solid #30363d; border-radius: 8px; padding: 14px;
+    background: #161b22;
+  }
+  .detail-card h4 { font-size: 13px; color: #e6edf3; margin-bottom: 8px; }
+  .detail-card p, .detail-card li { font-size: 12px; color: #8b949e; line-height: 1.6; }
+  .detail-card ul { padding-left: 18px; }
+
+  code {
+    background: #1c2128; padding: 2px 6px; border-radius: 4px;
+    font-size: 11px; color: #d2a8ff;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* StateGraph diagram */
+  .flow-diagram {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 12px;
+    padding: 24px; overflow-x: auto;
+  }
+  .flow-diagram pre {
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px; line-height: 1.5; color: #c9d1d9;
+  }
+  .node-start { color: #7ee787; }
+  .node-process { color: #79c0ff; }
+  .node-decision { color: #ff7b72; }
+  .node-tool { color: #d2a8ff; }
+  .node-end { color: #f0883e; }
+  .comment { color: #484f58; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>AI 智能面试系统 — 完整架构图</h1>
+<p class="subtitle">NestJS + LangGraph JS + Vue3 · 全 TypeScript · 企业 HR 内部平台</p>
+
+<!-- ===== LAYER 1: CLIENT ===== -->
+<div class="layer">
+  <div class="layer-label">Layer 1 · Client — 浏览器端</div>
+  <div class="box-row">
+    <div class="box accent-blue">
+      <div class="box-header">Vue3 · 候选人端 SPA</div>
+      <div class="box-body">
+        面试大厅 · 实时对话界面 · 代码编辑器 (Monaco) · 语音输入(可选) · 面试报告查看
+      </div>
+    </div>
+    <div class="box accent-orange">
+      <div class="box-header">Vue3 · HR 管理端 SPA</div>
+      <div class="box-body">
+        岗位管理 · 题库管理 · 面试配置 · 公司文档上传 · 候选人管理 · 报告看板
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:12px; display:flex; gap:12px; font-size:11px; color:#8b949e;">
+    <span>通信协议: SSE 流式推送 (面试对话) + POST (发送消息) + REST API (管理操作)</span>
+    <span>状态管理: Pinia</span>
+    <span>UI 组件: 待定</span>
+  </div>
+</div>
+
+<div class="arrow-down">▼</div>
+
+<!-- ===== LAYER 2: NESTJS ===== -->
+<div class="layer">
+  <div class="layer-label">Layer 2 · NestJS Backend — 服务端</div>
+
+  <!-- Gateway & Controllers -->
+  <div style="display:flex; gap:12px; margin-bottom:12px;">
+    <div class="box accent-teal" style="flex:1;">
+      <div class="box-header">SSE Controller</div>
+      <div class="box-body">面试 token 流式推送 (EventSource) · 心跳保活 · 自动重连</div>
+    </div>
+    <div class="box accent-teal" style="flex:1;">
+      <div class="box-header">REST Controllers</div>
+      <div class="box-body">鉴权 (JWT) · 岗位 CRUD · 题库管理 · 报告查询 · 文档上传</div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+
+  <!-- Service Layer -->
+  <div style="display:flex; gap:12px; margin-bottom:12px;">
+    <div class="box" style="flex:1;">
+      <div class="box-header">InterviewModule</div>
+      <div class="box-body">面试生命周期 · 会话管理 · 状态机调度</div>
+    </div>
+    <div class="box" style="flex:1;">
+      <div class="box-header">ReportModule</div>
+      <div class="box-body">报告生成 · 评分汇总 · PDF 导出</div>
+    </div>
+    <div class="box" style="flex:1;">
+      <div class="box-header">KnowledgeModule</div>
+      <div class="box-body">文档上传 · 分块解析 · Embedding 管理</div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+
+  <!-- Prisma ORM -->
+  <div class="box" style="margin-bottom:12px;">
+    <div class="box-header">Prisma ORM</div>
+    <div class="box-body" style="display:flex; gap:12px;">
+      <span>PostgreSQL (业务数据 + pgvector 向量)</span>
+      <span style="color:#484f58;">|</span>
+      <span>Redis (面试会话缓存 + WebSocket 状态)</span>
+      <span style="color:#484f58;">|</span>
+      <span>文件存储 (简历 PDF / 公司文档)</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼</div>
+
+  <!-- ==== CORE: LANGGRAPH ENGINE ==== -->
+  <div class="layer core" style="margin:0; background:#0d1117;">
+    <div class="layer-label" style="color:#3fb950;">核心 · LangGraph Interview Engine</div>
+
+    <div class="two-col">
+      <!-- Left: StateGraph Flow -->
+      <div class="flow-diagram" style="margin-bottom:0;">
+        <pre>
+<span class="node-start">START</span>
+  │
+  ▼
+<span class="node-process">┌─────────────────────┐</span>
+<span class="node-process">│  parse_resume       │</span>  <span class="comment">Tool: resume_parser</span>
+<span class="node-process">│  提取技能/项目/年限   │</span>
+<span class="node-process">└────────┬────────────┘</span>
+         │
+         ▼
+<span class="node-process">┌─────────────────────┐</span>
+<span class="node-process">│  icebreaker         │</span>  <span class="comment">个性化破冰</span>
+<span class="node-process">│  基于简历生成开场白   │</span>
+<span class="node-process">└────────┬────────────┘</span>
+         │
+         ▼
+<span class="node-process">┌─────────────────────────────────┐</span>
+<span class="node-process">│      TECHNICAL ROUND             │</span>
+<span class="node-process">│                                  │</span>
+<span class="node-process">│  tech_select ──→ tech_ask        │</span>
+<span class="node-process">│                     │            │</span>
+<span class="node-process">│                     ▼            │</span>
+<span class="node-process">│              tech_evaluate       │</span>
+<span class="node-process">│                     │            │</span>
+<span class="node-process">│                     ▼            │</span>
+<span class="node-process">│         ╔══════════════╗         │</span>
+<span class="node-decision">│         ║  route_tech  ║         │</span>
+<span class="node-process">│         ╚══╤════╤══════╝         │</span>
+<span class="node-process">│    ┌──────┘    │    └──────┐     │</span>
+<span class="node-process">│    ▼           ▼           ▼     │</span>
+<span class="node-process">│ follow_up  next_topic  → END     │</span>
+<span class="node-process">│    │           │                 │</span>
+<span class="node-process">│    └───────────┘                 │</span>
+<span class="node-process">└─────────────┬───────────────────┘</span>
+              │
+              ▼
+<span class="node-process">┌─────────────────────────────────┐</span>
+<span class="node-process">│      BEHAVIORAL ROUND            │</span>
+<span class="node-process">│                                  │</span>
+<span class="node-process">│  behavioral_select → ask → eval  │</span>
+<span class="node-process">│                         │        │</span>
+<span class="node-process">│         ╔═══════════════╗        │</span>
+<span class="node-decision">│         ║  route_behav  ║        │</span>
+<span class="node-process">│         ╚══╤════════════╝        │</span>
+<span class="node-process">│    follow_up / next_q → END      │</span>
+<span class="node-process">└─────────────┬───────────────────┘</span>
+              │
+              ▼
+<span class="node-process">┌─────────────────────┐</span>
+<span class="node-process">│  candidate_qa       │</span>  <span class="node-tool">Tool: retrieve_company_info (RAG)</span>
+<span class="node-process">│  反问 + 公司知识检索  │</span>  <span class="node-tool">pgvector 向量搜索</span>
+<span class="node-process">└────────┬────────────┘</span>
+         │
+         ▼
+<span class="node-process">┌─────────────────────┐</span>
+<span class="node-process">│  generate_report    │</span>  <span class="node-tool">Tool: report_generator</span>
+<span class="node-process">│  综合评分 + 能力画像  │</span>
+<span class="node-process">└────────┬────────────┘</span>
+         │
+         ▼
+<span class="node-end">END</span>
+        </pre>
+      </div>
+
+      <!-- Right: State + Config -->
+      <div>
+        <div class="detail-card" style="margin-bottom:12px;">
+          <h4>InterviewState (统一状态)</h4>
+          <ul>
+            <li><code>candidate</code> — 简历解析结果</li>
+            <li><code>currentStage</code> — 当前阶段标识</li>
+            <li><code>techRound</code> — 技术轮子状态</li>
+            <li><code>behavioralRound</code> — 行为轮子状态</li>
+            <li><code>answerHistory[]</code> — 全量回答+评估</li>
+            <li><code>scores</code> — 实时累加评分</li>
+            <li><code>messages[]</code> — 消息流(推前端)</li>
+            <li><code>qaCount</code> — 反问计数</li>
+          </ul>
+        </div>
+
+        <div class="detail-card" style="margin-bottom:12px;">
+          <h4>Checkpoint 检查点</h4>
+          <ul>
+            <li>每个节点执行后自动存状态</li>
+            <li>候选人断线 → 重连恢复</li>
+            <li>支持人工审批节点 (interrupt)</li>
+            <li>存储: PostgreSQL (langgraph checkpointer)</li>
+          </ul>
+        </div>
+
+        <div class="detail-card">
+          <h4>Conditional Edges (路由逻辑)</h4>
+          <ul>
+            <li><code>routeInTechnical</code> — 追问/换题/进入行为轮</li>
+            <li><code>routeInBehavioral</code> — 追问/换题/进入反问</li>
+            <li><code>shouldContinueQA</code> — 继续反问/结束</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="arrow-down">▼</div>
+
+<!-- ===== LAYER 3: EXTERNAL ===== -->
+<div class="layer">
+  <div class="layer-label">Layer 3 · External Services — 外部服务</div>
+  <div class="box-row">
+    <div class="box accent-purple">
+      <div class="box-header">LLM Provider</div>
+      <div class="box-body">
+        OpenAI / Claude / 国产模型<br>
+        统一 @langchain/core ChatModel 接口<br>
+        支持流式输出 (streaming)
+      </div>
+    </div>
+    <div class="box accent-purple">
+      <div class="box-header">Embedding Service</div>
+      <div class="box-body">
+        text-embedding-3-small<br>
+        文档向量化 (RAG)<br>
+        题目标签向量化 (可选)
+      </div>
+    </div>
+    <div class="box accent-purple">
+      <div class="box-header">语音服务 (可选)</div>
+      <div class="box-body">
+        STT: Whisper / 阿里云<br>
+        TTS: OpenAI TTS / 讯飞<br>
+        WebSocket 音频流
+      </div>
+    </div>
+    <div class="box accent-purple">
+      <div class="box-header">代码沙箱 (可选)</div>
+      <div class="box-body">
+        Docker 隔离执行<br>
+        安全策略限制<br>
+        支持多语言运行
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DATA MODEL ===== -->
+<h2>核心数据模型</h2>
+<div class="service-grid">
+  <div class="detail-card">
+    <h4>Candidate (候选人)</h4>
+    <ul>
+      <li>id, name, email, phone</li>
+      <li>resumeUrl, resumeParsed (JSON)</li>
+      <li>positionId (应聘岗位)</li>
+      <li>status: pending | interviewing | passed | rejected</li>
+    </ul>
+  </div>
+  <div class="detail-card">
+    <h4>Interview (面试记录)</h4>
+    <ul>
+      <li>id, candidateId, positionId</li>
+      <li>stateJson (LangGraph checkpoint)</li>
+      <li>threadId (LangGraph thread)</li>
+      <li>status, startedAt, endedAt</li>
+    </ul>
+  </div>
+  <div class="detail-card">
+    <h4>Question (题库)</h4>
+    <ul>
+      <li>id, title, type (technical|behavioral)</li>
+      <li>category, tags[], difficulty</li>
+      <li>expectedAnswer (参考答案)</li>
+      <li>evaluationCriteria (评分标准)</li>
+    </ul>
+  </div>
+  <div class="detail-card">
+    <h4>CompanyDoc (公司文档)</h4>
+    <ul>
+      <li>id, title, content, chunks[]</li>
+      <li>embedding (pgvector)</li>
+      <li>category, uploadedAt</li>
+      <li>用于 RAG 检索</li>
+    </ul>
+  </div>
+  <div class="detail-card">
+    <h4>Report (面试报告)</h4>
+    <ul>
+      <li>id, interviewId, candidateId</li>
+      <li>techScore, behavScore, overallScore</li>
+      <li>strengths[], weaknesses[]</li>
+      <li>summary, recommendation</li>
+    </ul>
+  </div>
+  <div class="detail-card">
+    <h4>Position (岗位)</h4>
+    <ul>
+      <li>id, title, department</li>
+      <li>jdText (职位描述)</li>
+      <li>techStack[], level</li>
+      <li>questionTemplates (关联题库)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== TECH STACK ===== -->
+<h2>技术栈总览</h2>
+<div class="detail-card" style="margin-bottom:12px;">
+  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e; width:160px;">前端框架</td>
+      <td style="padding:8px;"><code>Vue 3</code> + Pinia + Monaco Editor</td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">后端框架</td>
+      <td style="padding:8px;"><code>NestJS</code> + WebSocket</td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">AI 编排</td>
+      <td style="padding:8px;"><code>@langchain/langgraph</code> (StateGraph + Checkpoint)</td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">LLM 调用</td>
+      <td style="padding:8px;"><code>@langchain/core</code> + <code>@langchain/openai</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">数据库</td>
+      <td style="padding:8px;"><code>PostgreSQL</code> + <code>pgvector</code> (向量) + <code>Redis</code> (缓存/会话)</td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">ORM</td>
+      <td style="padding:8px;"><code>Prisma</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:8px; color:#8b949e;">RAG 检索</td>
+      <td style="padding:8px;"><code>pgvector</code> + OpenAI Embeddings</td>
+    </tr>
+    <tr>
+      <td style="padding:8px; color:#8b949e;">编程语言</td>
+      <td style="padding:8px;"><code>TypeScript</code> (全栈统一)</td>
+    </tr>
+  </table>
+</div>
+
+</div>
+</body>
+</html>

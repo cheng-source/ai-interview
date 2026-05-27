@@ -1,0 +1,107 @@
+<h2>LangChain vs LangGraph — 到底差在哪？</h2>
+<p class="subtitle">以你的面试系统为例</p>
+
+<div class="section">
+  <h3>核心区别：一条线 vs 一张图</h3>
+  <div class="split">
+    <div class="mockup" style="flex:1;">
+      <div class="mockup-header" style="background:#e65100;">只用 LangChain</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <div class="placeholder" style="padding: 12px; background:#fff3e0; border-radius:6px; margin-bottom:8px;">
+          <b>Chain 线性执行</b><br>
+          简历解析 → 开场白 → 技术问答 → 行为问答 → 生成报告<br>
+          <small style="color:#999;">一条链走到底，难以中途改道</small>
+        </div>
+        <div style="margin-top: 8px; padding: 8px; background:#fff3e0; border-radius:6px;">
+          <b>智能追问？得自己写状态机</b><br>
+          <small style="color:#999;">
+          const state = { stage, depth, score }<br>
+          while (stage !== 'done') {<br>
+          &nbsp;&nbsp;const response = await chain.invoke({state, answer})<br>
+          &nbsp;&nbsp;state = parseNextState(response) // 自己管状态<br>
+          }</small>
+        </div>
+        <div style="margin-top:8px; color:#c62828; font-size:12px;">
+          ⚠ 追问超过3层时状态管理开始失控<br>
+          ⚠ 没有内置恢复机制<br>
+          ⚠ 多分支逻辑散落在代码各处
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup" style="flex:1; border-color:#4caf50;">
+      <div class="mockup-header" style="background:#1b5e20;">LangChain + LangGraph</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <div class="placeholder" style="padding: 12px; background:#e8f5e9; border-radius:6px; margin-bottom:8px;">
+          <b>StateGraph 有向图</b><br>
+          <pre style="margin:0; font-size:11px;">
+    [简历解析]
+        ↓
+    [开场破冰]
+        ↓
+    [技术轮] ──→ [追问] ──→ [下一题]
+        ↓              ↑
+    [行为轮] ──→ [追问] ──→ [下一题]
+        ↓
+    [反问环节]
+        ↓
+    [综合报告]</pre>
+        </div>
+        <div style="margin-top:8px; color:#2e7d32; font-size:12px;">
+          ✓ 条件边：回答质量决定走"追问"还是"下一题"<br>
+          ✓ Checkpoint：每步自动存状态，断线恢复<br>
+          ✓ 图即文档：面试流程可视化、可测试
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>The Deciding Factor: 追问复杂度</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">场景</th>
+      <th style="text-align:center; padding:12px; background:var(--color-surface);">LangChain 够用？</th>
+      <th style="text-align:center; padding:12px; background:#1b5e20; color:#fff;">LangGraph 必要？</th>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>固定题库、固定顺序</b><br><small style="color:#999;">10道题按顺序来，每题给分</small></td>
+      <td style="text-align:center; padding:12px; color:#4caf50;">✓ 够用</td>
+      <td style="text-align:center; padding:12px; color:#999;">不必要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>1-2层简单追问</b><br><small style="color:#999;">答对了跳下一题，答错了给提示再问一次</small></td>
+      <td style="text-align:center; padding:12px; color:#e65100;">勉强，需自己写状态管理</td>
+      <td style="text-align:center; padding:12px; color:#4caf50;">✓ 推荐</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>深层动态追问 + 跨阶段跳跃</b><br><small style="color:#999;">根据回答深度动态展开，技术轮发现短板后行为轮调整方向</small></td>
+      <td style="text-align:center; padding:12px; color:#c62828;">✗ 会很痛苦</td>
+      <td style="text-align:center; padding:12px; color:#4caf50;">✓ 核心场景</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>断线恢复、HR中途介入</b><br><small style="color:#999;">候选人掉线10分钟后回来继续，HR在某节点审核</small></td>
+      <td style="text-align:center; padding:12px; color:#c62828;">✗ 得自己实现</td>
+      <td style="text-align:center; padding:12px; color:#4caf50;">✓ 内置支持</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>My Assessment</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>你的场景需要 LangGraph</h4>
+      <ul>
+        <li><b>动态追问</b>是你明确要求的能力 —— LangChain 的 Chain 模型是线性的，追问的分支逻辑必须自己造</li>
+        <li><b>6阶段面试流程</b>每个阶段内部都有循环（出题 → 回答 → 追问 → 判断是否深入）—— 这是典型的图结构</li>
+        <li><b>断线恢复</b>对 HR 系统是刚需 —— Checkpoint 机制开箱即用</li>
+        <li><b>费用不高</b>：@langchain/langgraph 的 JS SDK 免费开源，不增加任何成本</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top:12px; color:var(--color-text-secondary); font-size:13px;">
+    一句话：<b>LangChain 处理"说什么"，LangGraph 处理"什么时候说"</b>。你的面试系统两者都需要。
+  </p>
+</div>

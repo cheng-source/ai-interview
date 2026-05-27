@@ -1,0 +1,185 @@
+<h2>候选人反问 + RAG — 节点设计</h2>
+<p class="subtitle">在 candidate_qa 节点接入向量检索，回答公司相关问题</p>
+
+<div class="section">
+  <h3>candidate_qa 节点内部流程</h3>
+
+  <div style="background: var(--color-surface); border-radius: 12px; padding: 24px; font-family: monospace; font-size: 12px; line-height: 1.8;">
+
+<pre style="margin:0;">
+   behavioral_round 结束
+          │
+          ▼
+   ┌────────────────────────────────────────────────────┐
+   │              <b style="color:#4fc3f7;">candidate_qa</b>                        │
+   │                                                    │
+   │   ┌──────────────────────────────────────┐         │
+   │   │  <b>Step 1: 生成过渡语</b>                    │         │
+   │   │  "以上就是我的问题了。你对公司或岗位     │         │
+   │   │   有什么想了解的吗？"                    │         │
+   │   └──────────────┬───────────────────────┘         │
+   │                  │                                  │
+   │                  ▼                                  │
+   │   ┌──────────────────────────────────────┐         │
+   │   │  <b>Step 2: 接收候选人问题</b>                │         │
+   │   │  用户输入（文本）                        │         │
+   │   │  可能是："技术栈是什么？""加班多吗？"    │         │
+   │   └──────────────┬───────────────────────┘         │
+   │                  │                                  │
+   │                  ▼                                  │
+   │          ╔═══════════════╗                          │
+   │          ║ <b style="color:#ef5350;">问题分类</b>       ║                          │
+   │          ╚═══╤══════╤════╝                          │
+   │              │      │                                │
+   │      有关公司   无关/  "没有问题了"                   │
+   │      内部信息   闲聊                                 │
+   │              │      │                                │
+   │              ▼      ▼                                │
+   │   ┌────────────┐  ┌────────────┐                    │
+   │   │ <b>RAG 检索</b> │  │ LLM 直接   │                    │
+   │   │ Tool Call  │  │ 回复       │                    │
+   │   └─────┬──────┘  └─────┬──────┘                    │
+   │         │               │                            │
+   │         ▼               │                            │
+   │   ┌────────────────────────────┐                    │
+   │   │  <b>Step 3: 生成回答</b>            │                    │
+   │   │  有 RAG → 基于检索文档回答      │                    │
+   │   │  无 RAG → 通用礼貌回复          │                    │
+   │   └────────────┬───────────────┘                    │
+   │                │                                    │
+   │                ▼                                    │
+   │   ┌──────────────────────────────────────┐         │
+   │   │  <b>Step 4: 循环判断</b>                    │         │
+   │   │  候选人还有问题? → 回到 Step 2         │         │
+   │   │  候选人说"没有了" → 结束反问环节        │         │
+   │   │  已连续回答 ≥ 5 个问题 → 主动结束      │         │
+   │   └──────────────┬───────────────────────┘         │
+   │                  │                                  │
+   └──────────────────┼──────────────────────────────────┘
+                      │
+                      ▼
+              generate_report
+</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>RAG Tool 定义</h3>
+  <div style="background: var(--color-surface); border-radius: 8px; padding: 16px; font-size: 13px;">
+    <pre style="margin:0; color:var(--color-text);"><span style="color:#999;">// LangChain Tool Schema</span>
+<b>const</b> companyKnowledgeTool = <b>tool</b>(
+  async ({ query }) => {
+    <span style="color:#999;">// 1. Embedding 查询向量化</span>
+    <b>const</b> embedding = await embeddings.embedQuery(query);
+
+    <span style="color:#999;">// 2. PostgreSQL + pgvector 检索 top-3 最相关文档</span>
+    <b>const</b> docs = await db.query(`
+      SELECT content, metadata
+      FROM company_docs
+      ORDER BY embedding &lt;=&gt; $1
+      LIMIT 3
+    `, [embedding]);
+
+    <span style="color:#999;">// 3. 返回检索上下文</span>
+    <b>return</b> docs.map(d =&gt; d.content).join("\n---\n");
+  },
+  {
+    name: "retrieve_company_info",
+    description: "检索公司内部知识库，获取福利制度、技术栈、团队信息等",
+    schema: z.object({ query: z.string() })
+  }
+);</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>文档预处理流程</h3>
+  <div style="background: var(--color-surface); border-radius: 8px; padding: 16px; font-size: 13px;">
+
+<pre style="margin:0;">
+                    ┌─────────────────┐
+  HR 上传           │  公司文档         │
+  ─────────────────→│  .pdf / .docx    │
+                    │  .md / 纯文本     │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  <b>Document Loader</b>│
+                    │  分块 (chunk 500)  │
+                    │  重叠 (overlap 50) │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  <b>Embedding</b>      │
+                    │  text-embedding-  │
+                    │  3-small / 本地模型│
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  <b>pgvector</b>       │
+                    │  向量存储 + 元数据  │
+                    │  (和面试数据同库)   │
+                    └─────────────────┘
+</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>LangGraph 中如何使用</h3>
+  <div style="background: var(--color-surface); border-radius: 8px; padding: 16px; font-size: 13px;">
+    <pre style="margin:0; color:var(--color-text);"><span style="color:#999;">// candidate_qa 节点定义</span>
+<b>async function</b> candidateQaNode(state: InterviewState) {
+  <b>const</b> modelWithTools = llm.bindTools([companyKnowledgeTool]);
+
+  <b>const</b> response = await modelWithTools.invoke([
+    new SystemMessage(`你是公司的AI面试官，候选人正在反问环节。
+      如果问题涉及公司信息（福利、文化、技术栈、团队），
+      必须先调用 retrieve_company_info 检索文档再回答。
+      其他通用问题直接礼貌回复。`),
+    new HumanMessage(state.lastCandidateQuestion)
+  ]);
+
+  <span style="color:#999;">// LangGraph 自动处理 Tool Call 循环</span>
+  <span style="color:#999;">// 如果 LLM 决定调用 tool → 执行 → 把结果喂回 LLM → 输出答案</span>
+
+  <b>return</b> {
+    messages: [...state.messages, response],
+    qaCount: state.qaCount + 1
+  };
+}</pre>
+  </div>
+</div>
+
+<div class="section">
+  <h3>依赖清单</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">组件</th>
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">选型</th>
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">说明</th>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>向量数据库</b></td>
+      <td style="padding:12px;">pgvector</td>
+      <td style="padding:12px; font-size:13px;">PostgreSQL 扩展，和面试数据同库，运维最简单</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>Embedding 模型</b></td>
+      <td style="padding:12px;">OpenAI text-embedding-3-small</td>
+      <td style="padding:12px; font-size:13px;">便宜且够用，后续可换本地模型降成本</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>文档加载</b></td>
+      <td style="padding:12px;">@langchain/community document loaders</td>
+      <td style="padding:12px; font-size:13px;">支持 PDF、DOCX、Markdown、纯文本</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>文档管理</b></td>
+      <td style="padding:12px;">NestJS Service + 管理界面</td>
+      <td style="padding:12px; font-size:13px;">HR 在管理端上传/更新公司文档</td>
+    </tr>
+  </table>
+</div>

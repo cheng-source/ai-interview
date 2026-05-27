@@ -1,0 +1,124 @@
+<h2>System Architecture Overview</h2>
+<p class="subtitle">NestJS + LangGraph JS + Vue3 — 全 TypeScript 技术栈</p>
+
+<div class="section">
+  <h3>Layered Architecture</h3>
+  <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+
+    <!-- Layer 1: Frontend -->
+    <div style="border: 2px solid var(--color-accent); border-radius: 12px; padding: 16px; background: var(--color-surface);">
+      <div class="label" style="margin-bottom: 8px;">Layer 1 — 前端展示</div>
+      <div style="display: flex; gap: 12px;">
+        <div class="mockup" style="flex:1; margin:0;">
+          <div class="mockup-header">Vue3 SPA (候选人端)</div>
+          <div class="mockup-body">
+            <p style="margin:0;">面试界面 · 语音输入(可选) · 实时代码编辑器 · 结果报告</p>
+          </div>
+        </div>
+        <div class="mockup" style="flex:1; margin:0;">
+          <div class="mockup-header">Vue3 SPA (HR管理端)</div>
+          <div class="mockup-body">
+            <p style="margin:0;">岗位管理 · 面试配置 · 报告查看 · 数据看板</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector -->
+    <div style="text-align: center; font-size: 18px; color: var(--color-accent);">WebSocket / REST API</div>
+
+    <!-- Layer 2: NestJS -->
+    <div style="border: 2px solid var(--color-accent); border-radius: 12px; padding: 16px; background: var(--color-surface);">
+      <div class="label" style="margin-bottom: 8px;">Layer 2 — NestJS 后端服务</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+
+        <div style="display: flex; gap: 8px;">
+          <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+            <div class="mockup-header">Gateway / Controller</div>
+            <div class="mockup-body" style="font-size:13px;">
+              WebSocket 实时通信 · REST API · 鉴权中间件
+            </div>
+          </div>
+          <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+            <div class="mockup-header">Service Layer</div>
+            <div class="mockup-body" style="font-size:13px;">
+              面试管理 · 题库服务 · 评分服务 · 报告生成 · 语音TTS
+            </div>
+          </div>
+          <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+            <div class="mockup-header">Prisma ORM</div>
+            <div class="mockup-body" style="font-size:13px;">
+              PostgreSQL · Redis (Session) · 文件存储
+            </div>
+          </div>
+        </div>
+
+        <!-- LangGraph Adapter — highlighted -->
+        <div class="mockup" style="margin:0; border-color: #4caf50; border-width: 2px;">
+          <div class="mockup-header" style="background: linear-gradient(135deg, #1b5e20, #2e7d32);">LangGraph Interview Engine (核心)</div>
+          <div class="mockup-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 13px;">
+              <div>
+                <b>StateGraph 定义</b><br>
+                面试流程编排 · 阶段路由 · 条件分支
+              </div>
+              <div>
+                <b>Checkpoint 检查点</b><br>
+                状态持久化 · 断点恢复 · 人工审批节点
+              </div>
+              <div>
+                <b>LangChain Tools</b><br>
+                简历解析 · 代码运行 · 知识检索 · TTS
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Connector -->
+    <div style="text-align: center; font-size: 18px; color: var(--color-accent);">LangChain 内部调用</div>
+
+    <!-- Layer 3: External -->
+    <div style="border: 2px solid var(--color-accent); border-radius: 12px; padding: 16px; background: var(--color-surface);">
+      <div class="label" style="margin-bottom: 8px;">Layer 3 — 外部服务</div>
+      <div style="display: flex; gap: 8px;">
+        <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+          <div class="mockup-header">LLM Provider</div>
+          <div class="mockup-body" style="font-size:13px;">
+            OpenAI / Claude / 国产模型<br>统一 ChatModel 接口
+          </div>
+        </div>
+        <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+          <div class="mockup-header">语音服务</div>
+          <div class="mockup-body" style="font-size:13px;">
+            STT 语音识别<br>TTS 语音合成
+          </div>
+        </div>
+        <div class="mockup" style="flex:1; margin:0; border-color: #666;">
+          <div class="mockup-header">代码沙箱</div>
+          <div class="mockup-body" style="font-size:13px;">
+            安全执行候选人代码<br>Docker / VM 隔离
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key Design Decisions</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Why This Works</h4>
+      <ul>
+        <li>全 TypeScript — NestJS 直接 import @langchain/langgraph，零跨语言开销</li>
+        <li>LangGraph 在 NestJS Service 内运行，复用 DI 容器和数据库连接</li>
+        <li>WebSocket 直连，LLM token 流式推送到前端</li>
+        <li>单进程部署，调试和测试简单</li>
+      </ul>
+    </div>
+  </div>
+</div>

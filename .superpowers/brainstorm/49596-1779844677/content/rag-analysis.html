@@ -1,0 +1,91 @@
+<h2>RAG 在面试系统中用在哪？</h2>
+<p class="subtitle">逐阶段分析，不为了用而用</p>
+
+<div class="section">
+  <h3>逐阶段分析</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:14px;">
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">阶段</th>
+      <th style="text-align:left; padding:12px; background:var(--color-surface);">LLM 本身能做到吗？</th>
+      <th style="text-align:center; padding:12px; background:var(--color-surface);">需要 RAG？</th>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>简历解析</b></td>
+      <td style="padding:12px; font-size:13px;">LLM 直接理解简历文本，提取结构化信息</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>破冰</b></td>
+      <td style="padding:12px; font-size:13px;">基于简历提取的信息生成个性化开场白</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>技术面 — 出题</b></td>
+      <td style="padding:12px; font-size:13px;">LLM 熟知编程概念、算法、系统设计，能按难度生成题目</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>技术面 — 评估答案</b></td>
+      <td style="padding:12px; font-size:13px;">LLM 自带充足技术知识，能判断代码正确性和设计合理性</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>技术面 — 题库匹配</b></td>
+      <td style="padding:12px; font-size:13px;">如果有大量自建题库，需要从题库中检索最匹配岗位的题目</td>
+      <td style="text-align:center; padding:12px; color:#ffb74d;">⚡ 可选</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>行为面 — 出题</b></td>
+      <td style="padding:12px; font-size:13px;">LLM 能生成 STAR 方法论的行为题，结合 JD 定制</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>候选人反问</b></td>
+      <td style="padding:12px; font-size:13px;">候选人可能问公司福利、技术栈、团队结构——LLM 不知道这些</td>
+      <td style="text-align:center; padding:12px; color:#4caf50;">✓ 有价值</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--color-border);">
+      <td style="padding:12px;"><b>综合报告</b></td>
+      <td style="padding:12px; font-size:13px;">LLM 基于全量面试记录直接生成评分和评语</td>
+      <td style="text-align:center; padding:12px; color:#999;">✗ 不需要</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>结论</h3>
+
+  <div class="split">
+    <div class="mockup" style="flex:1; border-color:#4caf50;">
+      <div class="mockup-header" style="background:#1b5e20;">RAG 确实有价值的场景</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <ol style="margin:4px 0; padding-left:20px;">
+          <li><b>候选人反问</b> —— 公司手册、福利制度、团队架构、技术栈文档，这些 LLM 不知道，必须 RAG</li>
+          <li><b>JD→题库匹配</b> —— 如果公司有历史题库（几百题以上），用 embedding 检索比人工配题高效</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="mockup" style="flex:1; border-color:#e65100;">
+      <div class="mockup-header" style="background:#bf360c;">不需要 RAG 的场景（占 80%）</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <p style="margin:4px 0;">出题、追问、评估、报告 —— LLM 的知识储备已经够用，加 RAG 反而增加幻觉风险和延迟。</p>
+        <p style="margin:8px 0 4px 0; color:#ffab40; font-size:12px;">
+          ⚠ 常见误区：把"题库"当成 RAG 场景。如果题目是结构化存储在 PostgreSQL 里的，直接 SQL 查询比向量检索更准确。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros-cons" style="margin-top:16px;">
+    <div class="pros">
+      <h4>建议: MVP 阶段不加 RAG</h4>
+      <ul>
+        <li>核心面试流程（出题、追问、评估）不需要 RAG</li>
+        <li>候选人反问阶段初期可以限制为"暂不支持回答公司相关问题"</li>
+        <li>后续按需在反问节点接入 RAG，LangGraph 的 Tool 机制天然支持</li>
+        <li>题库匹配先用 SQL 搞定，量大了再考虑向量检索</li>
+      </ul>
+    </div>
+  </div>
+</div>
