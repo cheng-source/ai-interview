@@ -39,8 +39,9 @@ model Interview {
   positionId  String
   threadId    String    @unique
   stateJson   Json?
-  status      String    @default("pending")
-  startedAt   DateTime?
+  status        String    @default("pending")
+  interviewType String    @default("technical") // technical | behavioral
+  startedAt     DateTime?
   endedAt     DateTime?
   candidate   Candidate @relation(fields: [candidateId], references: [id])
   position    Position  @relation(fields: [positionId], references: [id])
