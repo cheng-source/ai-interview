@@ -51,4 +51,8 @@ export const InterviewStateAnnotation = Annotation.Root({
     reducer: (_, next) => next,
     default: () => '',
   }),
+  interviewType: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => 'technical',
+  }),
 });

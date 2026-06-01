@@ -40,14 +40,17 @@ export function createInterviewGraph() {
 
     .addEdge(START, 'parse_resume')
     .addEdge('parse_resume', 'icebreaker')
-    .addEdge('icebreaker', 'tech_select')
+    .addConditionalEdges('icebreaker', routeAfterIcebreaker, {
+      tech_select: 'tech_select',
+      behavioral_select: 'behavioral_select',
+    })
 
     .addEdge('tech_select', 'tech_ask')
     .addEdge('tech_ask', 'tech_evaluate')
     .addConditionalEdges('tech_evaluate', routeInTechnical, {
       tech_follow_up: 'tech_follow_up',
       tech_next_topic: 'tech_next_topic',
-      behavioral_select: 'behavioral_select',
+      candidate_qa: 'candidate_qa',
     })
     .addEdge('tech_follow_up', 'tech_evaluate')
     .addEdge('tech_next_topic', 'tech_select')

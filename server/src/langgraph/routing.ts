@@ -5,6 +5,7 @@ export function routeAfterParse(state: any): string {
 }
 
 export function routeAfterIcebreaker(state: any): string {
+  if (state.interviewType === 'behavioral') return 'behavioral_select';
   return 'tech_select';
 }
 
@@ -30,7 +31,7 @@ export function routeInTechnical(state: any): string {
     return 'tech_next_topic';
   }
 
-  return 'behavioral_select';
+  return 'candidate_qa';
 }
 
 export function routeAfterTechFollowUp(state: any): string {

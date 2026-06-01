@@ -14,10 +14,10 @@ export class InterviewService {
     this.graph = createInterviewGraph().compile({ checkpointer: this.checkpointer });
   }
 
-  async createInterview(candidateId: string, positionId: string) {
+  async createInterview(candidateId: string, positionId: string, interviewType: string) {
     const threadId = `interview-${Date.now()}`;
     return this.prisma.interview.create({
-      data: { candidateId, positionId, threadId, status: 'pending' },
+      data: { candidateId, positionId, threadId, status: 'pending', interviewType },
       include: { candidate: true, position: true },
     });
   }
@@ -41,6 +41,7 @@ export class InterviewService {
         techStack: interview.position.techStack,
       },
       resumeText,
+      interviewType: interview.interviewType || 'technical',
     };
 
     const config = { configurable: { thread_id: interview.threadId } };

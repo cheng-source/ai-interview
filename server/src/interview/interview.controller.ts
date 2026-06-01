@@ -7,8 +7,8 @@ export class InterviewController {
   constructor(private readonly interviewService: InterviewService) {}
 
   @Post()
-  async create(@Body() body: { candidateId: string; positionId: string }) {
-    return this.interviewService.createInterview(body.candidateId, body.positionId);
+  async create(@Body() body: { candidateId: string; positionId: string; interviewType: string }) {
+    return this.interviewService.createInterview(body.candidateId, body.positionId, body.interviewType);
   }
 
   @Get(':id/state')

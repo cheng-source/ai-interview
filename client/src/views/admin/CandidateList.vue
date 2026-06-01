@@ -24,12 +24,30 @@
         </select>
         <button type="submit">创建</button>
       </form>
+      <div v-if="showTypeDialog" class="type-overlay" @click.self="showTypeDialog = false">
+        <div class="type-dialog">
+          <h4>选择面试类型</h4>
+          <label class="type-option"><input type="radio" v-model="selectedType" value="technical" /> 技术面试</label>
+          <label class="type-option"><input type="radio" v-model="selectedType" value="behavioral" /> 行为面试</label>
+          <div class="type-actions">
+            <button @click="showTypeDialog = false" class="btn-cancel">取消</button>
+            <button @click="confirmType" class="btn-confirm">确认生成</button>
+          </div>
+        </div>
+      </div>
       <table class="table">
-        <thead><tr><th>姓名</th><th>邮箱</th><th>岗位</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>姓名</th><th>邮箱</th><th>岗位</th><th>面试类型</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="c in candidates" :key="c.id">
             <td>{{ c.name }}</td><td>{{ c.email }}</td>
-            <td>{{ c.position?.title || '-' }}</td><td>{{ c.status }}</td>
+            <td>{{ c.position?.title || '-' }}</td>
+            <td>
+              <span v-if="c.interviews?.length" :class="c.interviews[0].interviewType === 'behavioral' ? 'tag-behavioral' : 'tag-technical'">
+                {{ c.interviews[0].interviewType === 'behavioral' ? '行为面' : '技术面' }}
+              </span>
+              <span v-else class="text-gray-500">-</span>
+            </td>
+            <td>{{ c.status }}</td>
             <td>
               <button @click="startInterview(c)">开始面试</button>
             </td>
@@ -48,6 +66,9 @@ const candidates = ref<any[]>([]);
 const positions = ref<any[]>([]);
 const showForm = ref(false);
 const newCandidate = ref({ name: '', email: '', phone: '', positionId: '' });
+const showTypeDialog = ref(false);
+const typeTarget = ref<any>(null);
+const selectedType = ref('technical');
 
 onMounted(async () => {
   const [cRes, pRes] = await Promise.all([candidatesApi.list(), positionsApi.list()]);
@@ -64,10 +85,25 @@ async function handleCreate() {
 }
 
 async function startInterview(c: any) {
-  const interview = await interviewsApi.create({ candidateId: c.id, positionId: c.positionId });
+  typeTarget.value = c;
+  selectedType.value = 'technical';
+  showTypeDialog.value = true;
+}
+
+async function confirmType() {
+  if (!typeTarget.value) return;
+  const c = typeTarget.value;
+  showTypeDialog.value = false;
+  const interview = await interviewsApi.create({
+    candidateId: c.id,
+    positionId: c.positionId,
+    interviewType: selectedType.value,
+  });
   const link = `http://localhost:5173/interview/${interview.data.id}`;
   await navigator.clipboard.writeText(link);
   alert(`面试链接已复制: ${link}`);
+  const res = await candidatesApi.list();
+  candidates.value = res.data;
 }
 </script>
 
@@ -88,4 +124,15 @@ async function startInterview(c: any) {
 .table th, .table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; font-size: 14px; }
 .table th { color: #94a3b8; font-size: 12px; text-transform: uppercase; }
 .table button { color: #3b82f6; background: none; border: none; cursor: pointer; font-size: 13px; }
+.tag-technical { padding: 2px 8px; border-radius: 4px; background: #1e40af; color: #93c5fd; font-size: 12px; }
+.tag-behavioral { padding: 2px 8px; border-radius: 4px; background: #92400e; color: #fcd34d; font-size: 12px; }
+.text-gray-500 { color: #6b7280; }
+.type-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.type-dialog { background: #1e293b; border-radius: 12px; padding: 24px; min-width: 280px; }
+.type-dialog h4 { margin: 0 0 16px; font-size: 16px; color: #e2e8f0; }
+.type-option { display: block; padding: 8px 0; color: #cbd5e1; font-size: 14px; cursor: pointer; }
+.type-option input { margin-right: 8px; }
+.type-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.btn-cancel { padding: 6px 14px; background: #334155; color: #94a3b8; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn-confirm { padding: 6px 14px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
 </style>

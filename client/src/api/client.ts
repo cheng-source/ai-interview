@@ -22,7 +22,7 @@ export const candidatesApi = {
 };
 
 export const interviewsApi = {
-  create: (data: { candidateId: string; positionId: string }) =>
+  create: (data: { candidateId: string; positionId: string; interviewType: string }) =>
     api.post('/interviews', data),
   start: (id: string, resumeText: string) =>
     api.post(`/interviews/${id}/start`, { resumeText }),
