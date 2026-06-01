@@ -47,7 +47,7 @@
   <!-- 第二步：面试问答 -->
   <div v-else class="flex flex-col h-screen bg-gray-50">
     <div class="flex items-center justify-between pr-4 bg-white border-b border-gray-200">
-      <ProgressIndicator :currentStage="store.currentStage" />
+      <ProgressIndicator :currentStage="store.currentStage" :interviewType="store.interviewType" />
       <span class="text-xs text-gray-500 whitespace-nowrap tabular-nums">已用时 {{ formatElapsed(store.totalElapsed) }}</span>
     </div>
 
@@ -151,7 +151,7 @@ onMounted(async () => { store.onTimeout(handleTimeout); await tryResume(); });
 async function tryResume() {
   try {
     const res = await interviewsApi.getState(interviewId);
-    const { state, status, startedAt, resumeText, candidate, position } = res.data;
+    const { state, status, startedAt, resumeText, candidate, position, interviewType } = res.data;
 
     // 保存候选人/岗位信息到本地
     if (candidate) {
@@ -162,6 +162,7 @@ async function tryResume() {
       positionDepartment.value = position.department || '';
     }
     storedResumeText.value = resumeText || '';
+    if (interviewType) store.interviewType = interviewType;
 
     const hasMessages = state?.messages?.some((m: any) => getMsgContent(m));
     const isActive = hasMessages || (state?.currentStage && state.currentStage !== 'done');

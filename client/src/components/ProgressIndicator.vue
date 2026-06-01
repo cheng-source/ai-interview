@@ -16,14 +16,30 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-const props = defineProps<{ currentStage: string }>();
-const stageOrder = ['icebreaker', 'technical', 'behavioral', 'qa', 'done'];
-const stages = [
-  { key: 'icebreaker', label: '自我介绍' }, { key: 'technical', label: '技术面' },
-  { key: 'behavioral', label: '行为面' }, { key: 'qa', label: '反问' }, { key: 'done', label: '完成' },
+const props = defineProps<{ currentStage: string; interviewType?: string }>();
+
+const allStages = [
+  { key: 'icebreaker', label: '自我介绍' },
+  { key: 'technical', label: '技术面' },
+  { key: 'behavioral', label: '行为面' },
+  { key: 'qa', label: '反问' },
+  { key: 'done', label: '完成' },
 ];
+
+const stages = computed(() => {
+  if (props.interviewType === 'behavioral') {
+    return allStages.filter(s => s.key !== 'technical');
+  }
+  if (props.interviewType === 'technical') {
+    return allStages.filter(s => s.key !== 'behavioral');
+  }
+  return allStages;
+});
+
+const stageOrder = computed(() => stages.value.map(s => s.key));
+
 const completedStages = computed(() => {
-  const idx = stageOrder.indexOf(props.currentStage);
-  return new Set(idx >= 0 ? stageOrder.slice(0, idx) : []);
+  const idx = stageOrder.value.indexOf(props.currentStage);
+  return new Set(idx >= 0 ? stageOrder.value.slice(0, idx) : []);
 });
 </script>

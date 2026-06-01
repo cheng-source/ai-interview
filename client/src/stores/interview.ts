@@ -6,6 +6,7 @@ import { useInterviewTimer } from "./timer";
 export const useInterviewStore = defineStore("interview", () => {
   const messages = ref<ChatMessage[]>([]);
   const currentStage = ref("");
+  const interviewType = ref("technical");
   const statusText = ref("");
   const interviewId = ref("");
   const isConnected = ref(false);
@@ -189,6 +190,7 @@ export const useInterviewStore = defineStore("interview", () => {
   return {
     messages,
     currentStage,
+    interviewType,
     statusText,
     interviewId,
     isConnected,
