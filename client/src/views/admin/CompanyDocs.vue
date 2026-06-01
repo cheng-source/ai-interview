@@ -1,74 +1,82 @@
 <template>
-  <div class="admin-layout">
-    <aside class="sidebar">
-      <h3>AI 面试管理</h3>
-      <nav>
-        <router-link to="/admin">概览</router-link>
-        <router-link to="/admin/positions">岗位管理</router-link>
-        <router-link to="/admin/candidates">候选人管理</router-link>
-        <router-link to="/admin/docs">公司文档</router-link>
-      </nav>
-    </aside>
-    <main class="content">
-      <h2>公司文档 (RAG 知识库)</h2>
-      <form @submit.prevent="handleUpload" class="form">
-        <input v-model="doc.title" placeholder="文档标题" required />
-        <input v-model="doc.category" placeholder="分类 (福利/技术/文化)" required />
-        <textarea v-model="doc.content" placeholder="文档内容" rows="10" required />
-        <button type="submit">上传文档</button>
-      </form>
-      <table class="table" style="margin-top:20px;">
-        <thead><tr><th>标题</th><th>分类</th><th>上传时间</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr v-for="d in docs" :key="d.id">
-            <td>{{ d.title }}</td><td>{{ d.category }}</td>
-            <td>{{ new Date(d.uploadedAt).toLocaleDateString('zh-CN') }}</td>
-            <td><button @click="handleDelete(d.id)">删除</button></td>
-          </tr>
-        </tbody>
-      </table>
-    </main>
-  </div>
+  <AdminLayout>
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">公司文档 (RAG 知识库)</h2>
+    <el-form :model="doc" label-position="top" class="max-w-lg mb-6" @submit.prevent="handleUpload">
+      <el-form-item label="文档标题" required><el-input v-model="doc.title" /></el-form-item>
+      <el-form-item label="分类 (福利/技术/文化)" required><el-input v-model="doc.category" /></el-form-item>
+      <el-form-item label="文档内容" required><el-input v-model="doc.content" type="textarea" :rows="10" /></el-form-item>
+      <el-form-item><el-button type="primary" @click="handleUpload" :loading="uploading">上传文档</el-button></el-form-item>
+    </el-form>
+    <el-table :data="docs" empty-text="暂无文档" v-loading="loading">
+      <el-table-column prop="title" label="标题" />
+      <el-table-column prop="category" label="分类" />
+      <el-table-column label="上传时间" width="160">
+        <template #default="{ row }">{{ new Date(row.uploadedAt).toLocaleDateString('zh-CN') }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="160">
+        <template #default="{ row }">
+          <el-button size="small" text type="primary" @click="handleDownload(row)">下载</el-button>
+          <el-popconfirm title="确定删除该文档？" @confirm="handleDelete(row.id)">
+            <template #reference>
+              <el-button size="small" text type="danger">删除</el-button>
+            </template>
+          </el-popconfirm>
+        </template>
+      </el-table-column>
+    </el-table>
+  </AdminLayout>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { knowledgeApi } from '../../api/client';
+import AdminLayout from '../../components/AdminLayout.vue';
 
+const loading = ref(true);
+const uploading = ref(false);
 const docs = ref<any[]>([]);
 const doc = ref({ title: '', content: '', category: '' });
-
 onMounted(async () => {
-  const res = await knowledgeApi.list();
-  docs.value = res.data;
+  try {
+    const res = await knowledgeApi.list();
+    docs.value = res.data;
+  } catch {
+    ElMessage.error('加载文档列表失败');
+  } finally {
+    loading.value = false;
+  }
 });
-
 async function handleUpload() {
-  await knowledgeApi.upload(doc.value);
-  doc.value = { title: '', content: '', category: '' };
-  const res = await knowledgeApi.list();
-  docs.value = res.data;
+  uploading.value = true;
+  try {
+    await knowledgeApi.upload(doc.value);
+    doc.value = { title: '', content: '', category: '' };
+    const res = await knowledgeApi.list();
+    docs.value = res.data;
+    ElMessage.success('上传成功');
+  } catch {
+    ElMessage.error('上传失败');
+  } finally {
+    uploading.value = false;
+  }
 }
-
+function handleDownload(row: any) {
+  const blob = new Blob([row.content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${row.title}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 async function handleDelete(id: string) {
-  await knowledgeApi.delete(id);
-  docs.value = docs.value.filter((d) => d.id !== id);
+  try {
+    await knowledgeApi.delete(id);
+    docs.value = docs.value.filter((d) => d.id !== id);
+    ElMessage.success('删除成功');
+  } catch {
+    ElMessage.error('删除失败');
+  }
 }
 </script>
-
-<style scoped>
-.admin-layout { display: flex; min-height: 100vh; background: #0f172a; color: #e2e8f0; }
-.sidebar { width: 200px; background: #1e293b; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-.sidebar h3 { font-size: 16px; color: #3b82f6; }
-.sidebar nav { display: flex; flex-direction: column; gap: 8px; }
-.sidebar nav a { padding: 8px 12px; border-radius: 6px; color: #94a3b8; text-decoration: none; font-size: 14px; }
-.sidebar nav a:hover, .sidebar nav a.router-link-active { background: #334155; color: white; }
-.content { flex: 1; padding: 24px; }
-.form { display: flex; flex-direction: column; gap: 12px; max-width: 600px; }
-.form input, .form textarea { padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 14px; }
-.form button { padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; width: fit-content; }
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; font-size: 14px; }
-.table th { color: #94a3b8; font-size: 12px; text-transform: uppercase; }
-.table button { color: #f87171; background: none; border: none; cursor: pointer; font-size: 13px; }
-</style>

@@ -5,6 +5,7 @@ export interface ChatMessage {
   codeBlock?: string;
   stage?: string;
   timestamp: number;
+  streaming?: boolean;
 }
 
 export interface PositionInfo {

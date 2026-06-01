@@ -11,7 +11,7 @@ export const InterviewStateAnnotation = Annotation.Root({
   }),
   position: Annotation<InterviewState['position']>({
     reducer: (_, next) => next,
-    default: () => ({ title: '', department: '', jdText: '', techStack: [] }),
+    default: () => ({ title: '', department: '', jdText: '', techStack: [], level: '' }),
   }),
   currentStage: Annotation<InterviewState['currentStage']>({
     reducer: (_, next) => next,
@@ -48,6 +48,14 @@ export const InterviewStateAnnotation = Annotation.Root({
     default: () => 0,
   }),
   candidateAnswer: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
+  }),
+  resumeText: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
+  }),
+  candidateIntro: Annotation<string>({
     reducer: (_, next) => next,
     default: () => '',
   }),

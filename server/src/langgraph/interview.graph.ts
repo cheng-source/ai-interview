@@ -1,76 +1,88 @@
-import { StateGraph, END, START } from '@langchain/langgraph';
-import { InterviewStateAnnotation } from './state';
+import { StateGraph, END, START } from "@langchain/langgraph";
+import { InterviewStateAnnotation } from "./state";
 
-import { parseResumeNode } from './nodes/parse-resume.node';
-import { icebreakerNode } from './nodes/icebreaker.node';
+import { parseResumeNode } from "./nodes/parse-resume.node";
+import { icebreakerNode } from "./nodes/icebreaker.node";
 import {
-  techSelectNode, techAskNode, techEvaluateNode,
-  techFollowUpNode, techNextTopicNode,
-} from './nodes/technical-round.node';
+  techSelectNode,
+  techAskNode,
+  techEvaluateNode,
+  techFollowUpNode,
+  techNextTopicNode,
+} from "./nodes/technical-round.node";
 import {
-  behavioralSelectNode, behavioralAskNode, behavioralEvaluateNode,
-  behavioralFollowUpNode, behavioralNextQuestionNode,
-} from './nodes/behavioral-round.node';
-import { candidateQaNode } from './nodes/candidate-qa.node';
-import { generateReportNode } from './nodes/generate-report.node';
+  behavioralSelectNode,
+  behavioralAskNode,
+  behavioralEvaluateNode,
+  behavioralFollowUpNode,
+  behavioralNextQuestionNode,
+} from "./nodes/behavioral-round.node";
+import { candidateQaNode } from "./nodes/candidate-qa.node";
+import { generateReportNode } from "./nodes/generate-report.node";
 
 import {
-  routeAfterParse, routeAfterIcebreaker, routeInTechnical,
-  routeAfterTechFollowUp, routeAfterTechNextTopic,
-  routeInBehavioral, routeAfterBehavioralFollowUp,
-  routeAfterBehavioralNextQuestion, routeAfterCandidateQA, routeAfterReport,
-} from './routing';
+  routeAfterParse,
+  routeAfterIcebreaker,
+  routeInTechnical,
+  routeAfterTechFollowUp,
+  routeAfterTechNextTopic,
+  routeInBehavioral,
+  routeAfterBehavioralFollowUp,
+  routeAfterBehavioralNextQuestion,
+  routeAfterCandidateQA,
+  routeAfterReport,
+} from "./routing";
 
 export function createInterviewGraph() {
   const graph = new StateGraph(InterviewStateAnnotation)
-    .addNode('parse_resume', parseResumeNode)
-    .addNode('icebreaker', icebreakerNode)
-    .addNode('tech_select', techSelectNode)
-    .addNode('tech_ask', techAskNode)
-    .addNode('tech_evaluate', techEvaluateNode)
-    .addNode('tech_follow_up', techFollowUpNode)
-    .addNode('tech_next_topic', techNextTopicNode)
-    .addNode('behavioral_select', behavioralSelectNode)
-    .addNode('behavioral_ask', behavioralAskNode)
-    .addNode('behavioral_evaluate', behavioralEvaluateNode)
-    .addNode('behavioral_follow_up', behavioralFollowUpNode)
-    .addNode('behavioral_next_question', behavioralNextQuestionNode)
-    .addNode('candidate_qa', candidateQaNode)
-    .addNode('generate_report', generateReportNode)
+    .addNode("parse_resume", parseResumeNode)
+    .addNode("icebreaker", icebreakerNode)
+    .addNode("tech_select", techSelectNode)
+    .addNode("tech_ask", techAskNode)
+    .addNode("tech_evaluate", techEvaluateNode)
+    .addNode("tech_follow_up", techFollowUpNode)
+    .addNode("tech_next_topic", techNextTopicNode)
+    .addNode("behavioral_select", behavioralSelectNode)
+    .addNode("behavioral_ask", behavioralAskNode)
+    .addNode("behavioral_evaluate", behavioralEvaluateNode)
+    .addNode("behavioral_follow_up", behavioralFollowUpNode)
+    .addNode("behavioral_next_question", behavioralNextQuestionNode)
+    .addNode("candidate_qa", candidateQaNode)
+    .addNode("generate_report", generateReportNode)
 
-    .addEdge(START, 'parse_resume')
-    .addEdge('parse_resume', 'icebreaker')
-    .addConditionalEdges('icebreaker', routeAfterIcebreaker, {
-      tech_select: 'tech_select',
-      behavioral_select: 'behavioral_select',
+    .addEdge(START, "icebreaker")
+    .addEdge("icebreaker", "parse_resume")
+    .addConditionalEdges("parse_resume", routeAfterParse, {
+      tech_select: "tech_select",
+      behavioral_select: "behavioral_select",
     })
 
-    .addEdge('tech_select', 'tech_ask')
-    .addEdge('tech_ask', 'tech_evaluate')
-    .addConditionalEdges('tech_evaluate', routeInTechnical, {
-      tech_follow_up: 'tech_follow_up',
-      tech_next_topic: 'tech_next_topic',
-      candidate_qa: 'candidate_qa',
+    .addEdge("tech_select", "tech_ask")
+    .addEdge("tech_ask", "tech_evaluate")
+    .addConditionalEdges("tech_evaluate", routeInTechnical, {
+      tech_follow_up: "tech_follow_up",
+      tech_next_topic: "tech_next_topic",
+      candidate_qa: "candidate_qa",
     })
-    .addEdge('tech_follow_up', 'tech_evaluate')
-    .addEdge('tech_next_topic', 'tech_select')
+    .addEdge("tech_follow_up", "tech_evaluate")
+    .addEdge("tech_next_topic", "tech_select")
 
-    .addEdge('behavioral_select', 'behavioral_ask')
-    .addEdge('behavioral_ask', 'behavioral_evaluate')
-    .addConditionalEdges('behavioral_evaluate', routeInBehavioral, {
-      behavioral_follow_up: 'behavioral_follow_up',
-      behavioral_next_question: 'behavioral_next_question',
-      candidate_qa: 'candidate_qa',
+    .addEdge("behavioral_select", "behavioral_ask")
+    .addEdge("behavioral_ask", "behavioral_evaluate")
+    .addConditionalEdges("behavioral_evaluate", routeInBehavioral, {
+      behavioral_follow_up: "behavioral_follow_up",
+      behavioral_next_question: "behavioral_next_question",
+      candidate_qa: "candidate_qa",
     })
-    .addEdge('behavioral_follow_up', 'behavioral_evaluate')
-    .addEdge('behavioral_next_question', 'behavioral_select')
+    .addEdge("behavioral_follow_up", "behavioral_evaluate")
+    .addEdge("behavioral_next_question", "behavioral_select")
 
-    .addConditionalEdges('candidate_qa', routeAfterCandidateQA, {
-      generate_report: 'generate_report',
+    .addConditionalEdges("candidate_qa", routeAfterCandidateQA, {
+      generate_report: "generate_report",
       __end__: END,
     })
 
-    .addEdge('generate_report', END);
+    .addEdge("generate_report", END);
 
   return graph;
 }

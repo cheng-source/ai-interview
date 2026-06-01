@@ -19,6 +19,16 @@ const router = createRouter({
       component: () => import('../views/admin/PositionList.vue'),
     },
     {
+      path: '/admin/positions/new',
+      name: 'position-create',
+      component: () => import('../views/admin/PositionForm.vue'),
+    },
+    {
+      path: '/admin/positions/:id',
+      name: 'position-edit',
+      component: () => import('../views/admin/PositionForm.vue'),
+    },
+    {
       path: '/admin/candidates',
       name: 'candidates',
       component: () => import('../views/admin/CandidateList.vue'),

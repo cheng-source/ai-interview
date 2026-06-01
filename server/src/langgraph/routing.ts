@@ -1,12 +1,12 @@
 import { END } from '@langchain/langgraph';
 
 export function routeAfterParse(state: any): string {
-  return 'icebreaker';
+  if (state.interviewType === 'behavioral') return 'behavioral_select';
+  return 'tech_select';
 }
 
 export function routeAfterIcebreaker(state: any): string {
-  if (state.interviewType === 'behavioral') return 'behavioral_select';
-  return 'tech_select';
+  return 'parse_resume';
 }
 
 export function routeInTechnical(state: any): string {
@@ -19,15 +19,15 @@ export function routeInTechnical(state: any): string {
 
   const evaluation = lastRecord.evaluation || {};
   const depth = state.techRound?.depth || 0;
-  const techRound = state.techRound || {};
-  const topics = techRound.topics || [];
-  const questionsAsked = techRound.questionsAsked || [];
+  const projects = state.candidate?.projects || [];
+  const questionsAsked = state.techRound?.questionsAsked || [];
+  const maxQuestions = projects.length + 2; // 所有项目 + 最多2道八股文
 
   if (evaluation.isSurfaceLevel && depth < 3) {
     return 'tech_follow_up';
   }
 
-  if (questionsAsked.length < topics.length + 2) {
+  if (questionsAsked.length < maxQuestions) {
     return 'tech_next_topic';
   }
 

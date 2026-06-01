@@ -1,0 +1,19 @@
+D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/langgraph/nodes/candidate-qa.node.ts(7,10): error TS2589: Type instantiation is excessively deep and possibly infinite.
+src/langgraph/nodes/candidate-qa.node.ts(10,13): error TS2589: Type instantiation is excessively deep and possibly infinite.
+
+    at createTSError (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1895:10
+    at Object.require.extensions.<computed> [as .ts] (D:\前端项目\interview\server\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1465:32)
+    at Function._load (node:internal/modules/cjs/loader:1282:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14) {
+  diagnosticCodes: [ 2589, 2589 ]
+}

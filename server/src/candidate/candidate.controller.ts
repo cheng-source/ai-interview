@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CandidateService } from './candidate.service';
 
 @Controller('api/candidates')
@@ -14,6 +15,15 @@ export class CandidateController {
   @Post()
   create(@Body() body: { name: string; email: string; phone: string; positionId: string; resumeUrl?: string }) {
     return this.candidateService.create(body);
+  }
+
+  @Post(':id/resume')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  async uploadResume(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('请上传文件');
+    const text = await this.candidateService.extractResumeText(file);
+    await this.candidateService.update(id, { resumeText: text, resumeUrl: file.originalname });
+    return { text, fileName: file.originalname };
   }
 
   @Put(':id')

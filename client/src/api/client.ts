@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_BASE || 'http://localhost:3000/api',
   timeout: 30000,
 });
 
@@ -19,17 +19,28 @@ export const candidatesApi = {
   create: (data: any) => api.post('/candidates', data),
   update: (id: string, data: any) => api.put(`/candidates/${id}`, data),
   delete: (id: string) => api.delete(`/candidates/${id}`),
+  uploadResume: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ text: string; fileName: string }>(`/candidates/${id}/resume`, form);
+  },
 };
 
 export const interviewsApi = {
+  list: () => api.get('/interviews'),
   create: (data: { candidateId: string; positionId: string; interviewType: string }) =>
     api.post('/interviews', data),
   start: (id: string, resumeText: string) =>
     api.post(`/interviews/${id}/start`, { resumeText }),
+  uploadResume: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ text: string }>('/interviews/upload-resume', form);
+  },
   getState: (id: string) => api.get(`/interviews/${id}/state`),
   sendMessage: (id: string, message: string) =>
     api.post(`/interviews/${id}/message`, { message }),
-  getStreamUrl: (id: string) => `http://localhost:3000/api/interviews/${id}/stream`,
+  getStreamUrl: (id: string) => `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/stream`,
 };
 
 export function createSSEConnection(url: string, onMessage: (data: any) => void): EventSource {

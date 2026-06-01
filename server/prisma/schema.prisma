@@ -26,6 +26,7 @@ model Candidate {
   phone        String
   resumeUrl    String?
   resumeParsed Json?
+  resumeText   String?
   positionId   String
   status       String   @default("pending")
   position     Position @relation(fields: [positionId], references: [id])
@@ -34,18 +35,19 @@ model Candidate {
 }
 
 model Interview {
-  id          String    @id @default(uuid())
-  candidateId String
-  positionId  String
-  threadId    String    @unique
-  stateJson   Json?
+  id            String    @id @default(uuid())
+  candidateId   String
+  positionId    String
+  threadId      String    @unique
+  stateJson     Json?
   status        String    @default("pending")
   interviewType String    @default("technical") // technical | behavioral
   startedAt     DateTime?
-  endedAt     DateTime?
-  candidate   Candidate @relation(fields: [candidateId], references: [id])
-  position    Position  @relation(fields: [positionId], references: [id])
-  createdAt   DateTime  @default(now())
+  endedAt       DateTime?
+  lastActiveAt  DateTime?
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  position      Position  @relation(fields: [positionId], references: [id])
+  createdAt     DateTime  @default(now())
 }
 
 model CompanyDoc {
