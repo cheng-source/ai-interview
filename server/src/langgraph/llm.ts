@@ -79,7 +79,7 @@ class StreamingHandler extends BaseCallbackHandler {
 // ---- LLM factory ----
 export function createLLM(options: { temperature?: number; streaming?: boolean } = {}) {
   const opts: any = {
-    model: "deepseek-v4-pro",
+    model: process.env.LLM_MODEL || "deepseek-v4-pro",
     temperature: options.temperature ?? 0.5,
     apiKey: process.env.OPENAI_API_KEY,
     configuration: {
