@@ -83,6 +83,7 @@ export async function* streamStart(deps: SseDeps, interviewId: string, resumeTex
       jdText: interview.position.jdText, techStack: interview.position.techStack, level: interview.position.level,
     },
     resumeText: finalResumeText,
+    interviewType: interview.interviewType || 'technical',
   };
 
   const config = { configurable: { thread_id: interview.threadId } };
