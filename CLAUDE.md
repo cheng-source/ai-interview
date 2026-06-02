@@ -1,127 +1,127 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code（claude.ai/code）在此仓库中工作时提供指导。
 
-## Tech Stack
+## 技术栈
 
-**Frontend:** Vue 3 + Vite + Pinia + Vue Router + Tailwind CSS + Element Plus
-**Backend:** NestJS + Prisma + PostgreSQL (pgvector) + Redis + LangGraph
-**LLM:** DeepSeek-v4-pro via OpenAI-compatible API
+**前端:** Vue 3 + Vite + Pinia + Vue Router + Tailwind CSS + Element Plus
+**后端:** NestJS + Prisma + PostgreSQL（pgvector）+ Redis + LangGraph
+**大模型:** DeepSeek-v4-pro，通过 OpenAI 兼容 API 调用
 
-## Commands
+## 常用命令
 
 ```bash
-# Frontend (port 5173)
-cd client && npm run dev       # dev server
-cd client && npm run build     # production build
+# 前端（端口 5173）
+cd client && npm run dev       # 启动开发服务器
+cd client && npm run build     # 生产构建
 
-# Backend (port 3000)
-cd server && npm run dev       # nest start --watch
-cd server && npm run build     # tsc compile
+# 后端（端口 3000）
+cd server && npm run dev       # nest start --watch（热重载）
+cd server && npm run build     # tsc 编译
 
-# Database (Docker)
-docker-compose up -d           # starts postgres:5432 + redis:6379
+# 数据库（Docker）
+docker-compose up -d           # 启动 postgres:5432 + redis:6379
 
 # Prisma
-cd server && npx prisma migrate dev --name <name>
-cd server && npx prisma db push   # sync schema without migration
+cd server && npx prisma migrate dev --name <名称>   # 生成迁移
+cd server && npx prisma db push                      # 直接同步 schema（不生成迁移文件）
 ```
 
-## Environment Variables
+## 环境变量
 
 ```
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/interview
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 OPENAI_API_KEY=<deepseek-api-key>
-OPENAI_BASE_URL=https://api.deepseek.com/v1   # or any OpenAI-compatible endpoint
+OPENAI_BASE_URL=https://api.deepseek.com/v1   # 或其他 OpenAI 兼容端点
 PORT=3000
 ```
 
-## Project Structure
+## 项目结构
 
 ```
-client/                          Vue 3 frontend
+client/                          前端（Vue 3）
   src/
-    api/client.ts                Axios + all API methods (positions, candidates, interviews, knowledge, reports)
-    stores/interview.ts          Pinia store: messages, SSE parsing, timers, startInterview/sendAnswer
-    stores/timer.ts              Composable: question countdown + total elapsed, parses [time] N from LLM output
-    views/candidate/             InterviewSession.vue — two-step: confirm → chat
-    views/admin/                 Dashboard, CandidateList, PositionList/Form, CompanyDocs
-    components/                  ChatBubble, ProgressIndicator, CodeEditor, AdminLayout
-    router/index.ts              /interview/:id, /admin/* routes (lazy-loaded)
-    types/index.ts               ChatMessage, PositionInfo interfaces
+    api/client.ts                 Axios 实例 + 所有 API 方法（职位、候选人、面试、知识库、报告）
+    stores/interview.ts           Pinia store：消息管理、SSE 解析、计时器、startInterview/sendAnswer
+    stores/timer.ts               Composable：题目倒计时 + 总耗时，解析 LLM 输出中的 [time] N
+    views/candidate/              InterviewSession.vue — 两步流程：确认信息 → 开始对话
+    views/admin/                  管理后台：Dashboard、CandidateList、PositionList/Form、CompanyDocs
+    components/                   ChatBubble、ProgressIndicator、CodeEditor、AdminLayout
+    router/index.ts               /interview/:id、/admin/* 路由（懒加载）
+    types/index.ts                ChatMessage、PositionInfo 等接口定义
 
-server/                          NestJS backend
+server/                          后端（NestJS）
   src/
-    main.ts                      Bootstrap: CORS (origin:5173), ValidationPipe, port 3000
-    app.module.ts                ConfigModule + 6 feature modules
-    shared/schema.ts             Zod schemas: SSEEvent, Question, Evaluation, CandidateInfo — shared types
-    prisma/                      PrismaService + schema (Position, Candidate, Interview, CompanyDoc)
-    interview/                   Interview CRUD, SSE streaming, resume extraction (pdf/docx/doc)
-    interview/interview-sse.ts   Core SSE logic: streamStart, streamAnswer, streamInterview
+    main.ts                       启动入口：CORS（允许 origin:5173）、ValidationPipe、端口 3000
+    app.module.ts                 ConfigModule + 6 个功能模块
+    shared/schema.ts              Zod schema：SSEEvent、Question、Evaluation、CandidateInfo — 共享类型
+    prisma/                       PrismaService + 数据模型（Position、Candidate、Interview、CompanyDoc）
+    interview/                    面试 CRUD、SSE 流式推送、简历解析（pdf/docx/doc）
+    interview/interview-sse.ts    SSE 核心逻辑：streamStart、streamAnswer、streamInterview
     langgraph/
-      interview.graph.ts         Graph assembly: 13 nodes, conditional edges
-      state.ts                   LangGraph Annotation state (15 fields with reducers)
-      routing.ts                 Conditional edge logic (tech→follow/next/behavioral, behavioral→follow/next/qa, qa→report/end)
-      llm.ts                     LLM factory (ChatOpenAI), TokenQueue async iterator, StreamingHandler, resume parse dedup cache
-      nodes/                     One async function per graph node
-      personas/                  PersonaDefinition (id, systemPrompt, temperature, streaming, outputMode, Zod schema)
+      interview.graph.ts          图组装：13 个节点，条件边
+      state.ts                    LangGraph Annotation 状态（15 个字段，含 reducer）
+      routing.ts                  条件边路由逻辑（技术面→追问/下一题/行为面，行为面→追问/下一题/反问，反问→报告/结束）
+      llm.ts                      LLM 工厂（ChatOpenAI）、TokenQueue 异步迭代器、StreamingHandler、简历解析去重缓存
+      nodes/                      每个图节点对应一个 async 函数
+      personas/                   PersonaDefinition（id、systemPrompt、temperature、streaming、outputMode、Zod schema）
 ```
 
-## Interview Graph Flow
+## 面试流程图
 
 ```
-START → icebreaker → parse_resume → tech_select → tech_ask → tech_evaluate ⏸️
+START → icebreaker（破冰） → parse_resume（解析简历） → tech_select（选题） → tech_ask（提问） → tech_evaluate（评估） ⏸️
                     ↓
-  tech_evaluate → tech_follow_up → tech_evaluate   (surface-level & depth<3)
-  tech_evaluate → tech_next_topic → tech_select    (more topics remain)
-  tech_evaluate → behavioral_select                (tech round done)
+  tech_evaluate → tech_follow_up（追问） → tech_evaluate        （回答浅显 且 追问深度<3）
+  tech_evaluate → tech_next_topic（下一主题） → tech_select      （还有剩余主题）
+  tech_evaluate → behavioral_select（进入行为面）                （技术面结束）
                     ↓
   behavioral_select → behavioral_ask → behavioral_evaluate ⏸️
                     ↓
-  behavioral_evaluate → behavioral_follow_up → behavioral_evaluate   (vague & depth<2)
-  behavioral_evaluate → behavioral_next_question → behavioral_select (more competencies)
-  behavioral_evaluate → candidate_qa                                  (behavioral done)
+  behavioral_evaluate → behavioral_follow_up → behavioral_evaluate   （回答模糊 且 追问深度<2）
+  behavioral_evaluate → behavioral_next_question → behavioral_select （还有剩余能力项）
+  behavioral_evaluate → candidate_qa（反问环节）                      （行为面结束）
                     ↓
-  candidate_qa → candidate_qa (loop, qaCount<5) → generate_report → END
+  candidate_qa → candidate_qa（循环，qaCount<5） → generate_report（生成报告） → END
 ```
 
-⏸️ = interrupt point. Graph pauses when `candidateAnswer` is empty; resumes via `updateState` + `stream(null)` when the candidate sends a message.
+⏸️ = 中断点。当 `candidateAnswer` 为空时图暂停；候选人发送消息后通过 `updateState` + `stream(null)` 恢复执行。
 
-**Routing thresholds**: tech follow-up max depth=3, behavioral follow-up max depth=2, candidate QA max 5 questions. Tech round covers all candidate projects + up to 2 concept questions.
+**路由阈值**：技术追问最大深度=3，行为追问最大深度=2，反问环节最多 5 个问题。技术面覆盖所有候选人项目 + 最多 2 道概念题。
 
-## Key Architecture Patterns
+## 核心架构模式
 
-### Persona System
-Every LLM call goes through `executePersona(persona, userMessage)` in `persona-executor.ts`. Each persona is a `PersonaDefinition` with:
-- `outputMode: 'text'` — streaming tokens flow to SSE
-- `outputMode: 'structured'` — LLM returns JSON parsed against a Zod schema, no streaming
+### Persona（角色）系统
+所有 LLM 调用均通过 `persona-executor.ts` 中的 `executePersona(persona, userMessage)` 执行。每个 persona 是一个 `PersonaDefinition`，包含：
+- `outputMode: 'text'` — 流式 token 直接推送至 SSE
+- `outputMode: 'structured'` — LLM 返回 JSON，按 Zod schema 解析，不流式输出
 
-Personas live in `server/src/langgraph/personas/*.persona.ts` — one per node role. The persona executor handles the `withStructuredOutput` fallback (prompt-based JSON extraction instead of function calling, to avoid DeepSeek thinking-mode errors).
+Persona 文件位于 `server/src/langgraph/personas/*.persona.ts` — 每个节点角色一个文件。persona 执行器处理了 `withStructuredOutput` 的降级方案（基于 prompt 的 JSON 提取替代 function calling，以规避 DeepSeek thinking 模式的报错）。
 
-### SSE Protocol
-Events streamed from server to client: `status`, `token`, `token_end`, `message`, `evaluation`, `stage`, `done`, `error`. The frontend Pinia store (`interview.ts`) parses each event type:
-- `token`/`token_end` — streaming LLM output with incremental append to last message
-- `message` — complete message (used for non-streaming nodes like tech_select)
-- `evaluation` — scored evaluation after each answer
-- `stage` — current interview stage change
-- `done` — final report
+### SSE 协议
+服务端向客户端推送的事件类型：`status`、`token`、`token_end`、`message`、`evaluation`、`stage`、`done`、`error`。前端 Pinia store（`interview.ts`）解析各类事件：
+- `token`/`token_end` — 流式 LLM 输出，增量追加到最后一条消息
+- `message` — 完整消息（用于非流式节点，如 tech_select）
+- `evaluation` — 每次回答后的评分
+- `stage` — 当前面试阶段变化
+- `done` — 最终报告
 
-### State Persistence (3-tier fallback)
-1. **MemorySaver** (primary) — LangGraph's in-memory checkpointer
-2. **Redis** (TTL 24h) — backup via `saveStateToRedis`/`loadStateFromRedis`
-3. **DB `stateJson` column** — final fallback, written on every interrupt/error
+### 状态持久化（三级降级）
+1. **MemorySaver**（主） — LangGraph 的内存检查点
+2. **Redis**（TTL 24 小时） — 通过 `saveStateToRedis`/`loadStateFromRedis` 备份
+3. **数据库 `stateJson` 字段** — 最终兜底，每次中断/错误时写入
 
-On resume, `getInterviewState` tries all three in order. The Interview model carries `threadId` (unique per interview) as the LangGraph thread identifier.
+恢复时，`getInterviewState` 按上述顺序依次尝试。Interview 模型携带 `threadId`（每次面试唯一）作为 LangGraph 线程标识。
 
-### Resume Parsing Dedup
-`getOrStartResumeParse(threadId, fn)` in `llm.ts` ensures the resume LLM call runs exactly once — the async pre-warming in `streamStart` and the synchronous call in `parse_resume` node share the same Promise. After completion, the resolved value is cached for subsequent callers.
+### 简历解析去重
+`llm.ts` 中的 `getOrStartResumeParse(threadId, fn)` 确保简历 LLM 调用只执行一次 — `streamStart` 中的异步预热和 `parse_resume` 节点中的同步调用共享同一个 Promise。完成后，解析结果缓存供后续调用者使用。
 
-### Timer Protocol
-LLM outputs `[time] N` (e.g., `[time] 240`) to set a question countdown timer. The frontend `timer.ts` composaable parses this with `tryStartTimer(text)`. Difficulty→seconds mapping: 1→120, 2→180, 3→240, 4→300, 5→420.
+### 计时器协议
+LLM 输出 `[time] N`（如 `[time] 240`）来设置题目倒计时。前端 `timer.ts` composable 通过 `tryStartTimer(text)` 解析此标记。难度→秒数映射：1→120、2→180、3→240、4→300、5→420。
 
-### Thinking Mode Compatibility
-DeepSeek v4-pro `thinking` mode doesn't support `tool_choice` (required by LangChain's `withStructuredOutput`). The codebase works around this:
-- All structured outputs use prompt-based JSON extraction (`zodToJsonTemplate`) instead of function calling
-- Knowledge search uses raw SQL (`$queryRawUnsafe`) instead of `bindTools` vector search
+### Thinking 模式兼容性
+DeepSeek v4-pro 的 `thinking` 模式不支持 `tool_choice`（LangChain `withStructuredOutput` 所需）。代码中的应对方案：
+- 所有结构化输出使用基于 prompt 的 JSON 提取（`zodToJsonTemplate`）替代 function calling
+- 知识库搜索使用原生 SQL（`$queryRawUnsafe`）替代 `bindTools` 向量搜索

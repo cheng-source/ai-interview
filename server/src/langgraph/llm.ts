@@ -1,4 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 
 // ---- async queue for streaming tokens & events ----
@@ -91,6 +92,27 @@ export function createLLM(options: { temperature?: number; streaming?: boolean }
     opts.callbacks = [new StreamingHandler()];
   }
   return new ChatOpenAI(opts);
+}
+
+// ---- Embedding factory ----
+let cachedEmbeddings: OpenAIEmbeddings | null = null;
+
+export function createEmbeddings(): OpenAIEmbeddings {
+  if (!cachedEmbeddings) {
+    const opts: any = {
+      modelName: process.env.EMBEDDING_MODEL || 'text-embedding-v3',
+      openAIApiKey: process.env.EMBEDDING_API_KEY,
+      configuration: {
+        baseURL: process.env.EMBEDDING_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      },
+    };
+    const dims = parseInt(process.env.EMBEDDING_DIMENSIONS || '', 10);
+    if (!isNaN(dims)) {
+      opts.dimensions = dims;
+    }
+    cachedEmbeddings = new OpenAIEmbeddings(opts);
+  }
+  return cachedEmbeddings;
 }
 
 // ---- 简历解析共享 Promise，防止后台+同步跑两次 LLM ----

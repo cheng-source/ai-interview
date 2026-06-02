@@ -56,4 +56,16 @@ model CompanyDoc {
   content    String
   category   String
   uploadedAt DateTime @default(now())
+  chunks     CompanyDocChunk[]
+}
+
+model CompanyDocChunk {
+  id        String      @id @default(uuid())
+  docId     String
+  content   String
+  chunkIndex Int        @default(0)
+  embedding Unsupported("vector(1024)")?
+  doc       CompanyDoc  @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  @@index([docId])
 }
