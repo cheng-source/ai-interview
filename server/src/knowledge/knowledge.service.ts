@@ -1,10 +1,71 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createEmbeddings } from '../langgraph/llm';
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 
-const CHUNK_SIZE = 800;
-const CHUNK_OVERLAP = 100;
+const CHUNK_TARGET = 800;   // 目标 chunk 大小
+const CHUNK_MAX = 1200;     // 超大的 chunk 需要拆分
+const SENTENCE_RE = /(?<=[。！？；\n])/;
+
+/** 语义分块：尊重文档结构，避免硬切 */
+function semanticChunk(text: string): string[] {
+  const lines = text.split('\n');
+
+  // 第一步：按 Markdown 标题切分段落块
+  const paragraphs: string[] = [];
+  let buf = '';
+  for (const line of lines) {
+    if (/^#{1,6}\s/.test(line) && buf.trim()) {
+      paragraphs.push(buf.trim());
+      buf = '';
+    }
+    buf += line + '\n';
+  }
+  if (buf.trim()) paragraphs.push(buf.trim());
+
+  // 如果没有标题，回退到双换行切分
+  const sections =
+    paragraphs.length > 1
+      ? paragraphs
+      : text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+
+  // 第二步：合并过小的相邻段落
+  const merged: string[] = [];
+  let pending = '';
+  for (const section of sections) {
+    if (!pending) {
+      pending = section;
+    } else if ((pending + '\n\n' + section).length <= CHUNK_TARGET) {
+      pending += '\n\n' + section;
+    } else {
+      merged.push(pending);
+      pending = section;
+    }
+  }
+  if (pending) merged.push(pending);
+
+  // 第三步：拆分超大段落（按句子边界）
+  const chunks: string[] = [];
+  for (const section of merged) {
+    if (section.length <= CHUNK_MAX) {
+      chunks.push(section);
+    } else {
+      const sentences = section.split(SENTENCE_RE).filter(Boolean);
+      let current = '';
+      for (const sentence of sentences) {
+        if ((current + sentence).length > CHUNK_TARGET && current) {
+          chunks.push(current.trim());
+          // overlap：保留最后一句作为下一个 chunk 的开头
+          current = current.split(SENTENCE_RE).slice(-1).join('') + sentence;
+        } else {
+          current += sentence;
+        }
+      }
+      if (current.trim()) chunks.push(current.trim());
+    }
+  }
+
+  return chunks;
+}
 
 @Injectable()
 export class KnowledgeService {
@@ -19,24 +80,22 @@ export class KnowledgeService {
       data: { title, content, category },
     });
 
-    // 向量化：分块 + 生成 embedding + 写入 CompanyDocChunk
+    // 向量化：语义分块 + 生成 embedding + 写入 CompanyDocChunk
     try {
-      const splitter = new RecursiveCharacterTextSplitter({
-        chunkSize: CHUNK_SIZE,
-        chunkOverlap: CHUNK_OVERLAP,
-      });
-      const docs = await splitter.createDocuments([content]);
+      const chunks = semanticChunk(content);
       const embeddings = createEmbeddings();
-      const vectors = await embeddings.embedDocuments(docs.map((d) => d.pageContent));
+      const vectors = await embeddings.embedDocuments(chunks);
 
       // Unsupported("vector") 类型无法通过 Prisma typed API 写入，用 transaction 批量 raw SQL
       await this.prisma.$transaction(
-        docs.map((chunk, i) =>
+        chunks.map((chunk, i) =>
           this.prisma.$executeRawUnsafe(
-            `INSERT INTO "CompanyDocChunk" ("id", "docId", "content", "chunkIndex", "embedding")
-             VALUES (gen_random_uuid()::text, $1, $2, $3, $4::vector)`,
+            `INSERT INTO "CompanyDocChunk" ("id", "docId", "title", "category", "content", "chunkIndex", "embedding")
+             VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::vector)`,
             doc.id,
-            chunk.pageContent,
+            title,
+            category,
+            chunk,
             i,
             `[${vectors[i].join(',')}]`,
           ),
@@ -68,25 +127,47 @@ export class KnowledgeService {
   }
 
   /** 向量语义检索，用于 candidate-qa 节点 */
-  async vectorSearch(query: string, topK = 3, minSimilarity = 0.3) {
+  async vectorSearch(query: string, topK = 3, minSimilarity = 0.3, category?: string) {
     const embeddings = createEmbeddings();
     const [queryVector] = await embeddings.embedDocuments([query]);
 
-    const results = await this.prisma.$queryRawUnsafe<
-      Array<{ content: string; similarity: number; docId: string }>
-    >(
-      `SELECT c.content, 1 - (c.embedding <=> $1::vector) AS similarity, c."docId"
+    let sql = `SELECT c.content, c.title, 1 - (c.embedding <=> $1::vector) AS similarity, c."docId"
        FROM "CompanyDocChunk" c
-       WHERE c.embedding IS NOT NULL
-       ORDER BY c.embedding <=> $1::vector
-       LIMIT $2`,
-      `[${queryVector.join(',')}]`,
-      topK,
-    );
+       WHERE c.embedding IS NOT NULL`;
+    const params: any[] = [`[${queryVector.join(',')}]`];
+
+    // 按 category 过滤：先尝试精确匹配，无结果则回退全量
+    if (category) {
+      sql += ` AND c.category = $2`;
+      params.push(category);
+    }
+
+    sql += ` ORDER BY c.embedding <=> $1::vector LIMIT $${params.length + 1}`;
+    params.push(topK);
+
+    const results = await this.prisma.$queryRawUnsafe<
+      Array<{ content: string; title: string; similarity: number; docId: string }>
+    >(sql, ...params);
+
+    // 如果按 category 过滤后无结果，回退到不带 category 的全量检索
+    if (!results.length && category) {
+      const fallbackSql = `SELECT c.content, c.title, 1 - (c.embedding <=> $1::vector) AS similarity, c."docId"
+        FROM "CompanyDocChunk" c
+        WHERE c.embedding IS NOT NULL
+        ORDER BY c.embedding <=> $1::vector
+        LIMIT $2`;
+      const fallback = await this.prisma.$queryRawUnsafe<
+        Array<{ content: string; title: string; similarity: number; docId: string }>
+      >(fallbackSql, `[${queryVector.join(',')}]`, topK);
+      return fallback
+        .filter((r) => r.similarity >= minSimilarity)
+        .map((r) => `[来源: ${r.title}]\n${r.content}`)
+        .join('\n\n---\n\n');
+    }
 
     return results
       .filter((r) => r.similarity >= minSimilarity)
-      .map((r) => r.content)
-      .join('\n---\n');
+      .map((r) => `[来源: ${r.title}]\n${r.content}`)
+      .join('\n\n---\n\n');
   }
 }

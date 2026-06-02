@@ -115,6 +115,42 @@ export function createEmbeddings(): OpenAIEmbeddings {
   return cachedEmbeddings;
 }
 
+// ---- Reranker (DashScope gte-rerank) ----
+export async function rerank(
+  query: string,
+  documents: string[],
+  topN = 3,
+): Promise<{ content: string; score: number }[]> {
+  if (!documents.length) return [];
+  const res = await fetch(
+    `${process.env.EMBEDDING_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1"}/../../services/reranker/text-reranking/text-reranking`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.EMBEDDING_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: process.env.RERANK_MODEL || "gte-rerank",
+        query,
+        documents,
+        top_n: topN,
+      }),
+    },
+  );
+  if (!res.ok) {
+    console.error("Rerank API error:", res.status, await res.text());
+    return documents.slice(0, topN).map((content) => ({ content, score: 0 }));
+  }
+  const data = (await res.json()) as {
+    output: { results: Array<{ index: number; relevance_score: number }> };
+  };
+  return (data.output?.results || []).map((r) => ({
+    content: documents[r.index],
+    score: r.relevance_score,
+  }));
+}
+
 // ---- 简历解析共享 Promise，防止后台+同步跑两次 LLM ----
 const resumeParseMap = new Map<string, Promise<any>>();
 
