@@ -51,34 +51,42 @@
       <span class="text-xs text-gray-500 whitespace-nowrap tabular-nums">已用时 {{ formatElapsed(store.totalElapsed) }}</span>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-5 flex flex-col" ref="chatRef">
-      <ChatBubble v-for="msg in store.messages" :key="msg.id" :message="msg" />
-      <div v-if="store.statusText" class="flex items-center gap-2 max-w-[80%] px-4 py-2.5 rounded-xl mb-3 self-start bg-gray-100 border border-gray-200 text-gray-500 text-[13px]">
-        <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-        {{ store.statusText }}
-      </div>
-      <div v-if="store.currentStage === 'done'" class="text-center py-5 text-green-500 text-base mt-6">
-        ✓ 面试完成
-      </div>
-    </div>
+    <div class="flex-1 flex overflow-hidden">
+      <!-- 左侧：聊天 + 输入区 -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-5 flex flex-col" ref="chatRef">
+          <ChatBubble v-for="msg in store.messages" :key="msg.id" :message="msg" />
+          <div v-if="store.statusText" class="flex items-center gap-2 max-w-[80%] px-4 py-2.5 rounded-xl mb-3 self-start bg-gray-100 border border-gray-200 text-gray-500 text-[13px]">
+            <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            {{ store.statusText }}
+          </div>
+          <div v-if="store.currentStage === 'done'" class="text-center py-5 text-green-500 text-base mt-6">
+            ✓ 面试完成
+          </div>
+        </div>
 
-    <div v-if="store.currentStage !== 'done'" class="flex gap-2 p-3 bg-white border-t border-gray-200">
-      <div class="flex-1 flex flex-col">
-        <textarea
-          v-model="userInput"
-          @keydown.enter.exact.prevent="handleSend"
-          placeholder="描述你的思路... (Enter 发送)"
-          class="flex-1 p-2.5 rounded-lg border border-gray-300 bg-white text-gray-800 outline-none resize-none text-sm leading-relaxed min-h-11 focus:border-blue-400"
-          :disabled="sending"
-        />
-        <div v-if="store.questionTimeRemaining > 0"
-          :class="['text-xs mt-1 tabular-nums', store.questionTimeRemaining <= 30 ? 'text-red-500 font-semibold' : 'text-blue-500']">
-          ⏱ 剩余 {{ formatElapsed(store.questionTimeRemaining) }}
+        <div v-if="store.currentStage !== 'done'" class="flex gap-2 p-3 bg-white border-t border-gray-200">
+          <div class="flex-1 flex flex-col">
+            <textarea
+              v-model="userInput"
+              @keydown.enter.exact.prevent="handleSend"
+              placeholder="描述你的思路... (Enter 发送)"
+              class="flex-1 p-2.5 rounded-lg border border-gray-300 bg-white text-gray-800 outline-none resize-none text-sm leading-relaxed min-h-11 focus:border-blue-400"
+              :disabled="sending"
+            />
+            <div v-if="store.questionTimeRemaining > 0"
+              :class="['text-xs mt-1 tabular-nums', store.questionTimeRemaining <= 30 ? 'text-red-500 font-semibold' : 'text-blue-500']">
+              ⏱ 剩余 {{ formatElapsed(store.questionTimeRemaining) }}
+            </div>
+          </div>
+          <el-button type="primary" @click="handleSend" :disabled="!userInput.trim() || sending" :loading="sending">
+            {{ sending ? '发送中...' : '发送' }}
+          </el-button>
         </div>
       </div>
-      <el-button type="primary" @click="handleSend" :disabled="!userInput.trim() || sending" :loading="sending">
-        {{ sending ? '发送中...' : '发送' }}
-      </el-button>
+
+      <!-- 右侧：AI 状态侧边栏 -->
+      <InterviewSidebar v-if="store.currentStage !== 'done'" />
     </div>
   </div>
 </template>
@@ -90,6 +98,7 @@ import { useInterviewStore } from '../../stores/interview';
 import { interviewsApi } from '../../api/client';
 import ChatBubble from '../../components/ChatBubble.vue';
 import ProgressIndicator from '../../components/ProgressIndicator.vue';
+import InterviewSidebar from '../../components/InterviewSidebar.vue';
 
 const route = useRoute();
 const store = useInterviewStore();
@@ -198,6 +207,39 @@ async function tryResume() {
             }
           }
         }
+        // 重建侧边栏数据：评分记录
+        if (state.answerHistory?.length) {
+          for (const record of state.answerHistory) {
+            if (!record.evaluation) continue;
+            store.evaluations.push({
+              questionText: record.question?.text || '',
+              score: record.evaluation.score,
+              summary: record.evaluation.summary || '',
+              stage: record.stage || '',
+            });
+          }
+        }
+        // 重建侧边栏数据：执行流程时间线
+        const log: Array<{ label: string; time: string; type: 'completed' | 'active' }> = [];
+        const stageLabelMap: Record<string, string> = { icebreaker: '自我介绍', technical: '技术面', behavioral: '行为面', qa: '反问', done: '完成' };
+        if (hasMessages) log.push({ label: '破冰', time: '', type: 'completed' });
+        if (state.candidate?.skills?.length > 0 || state.candidate?.projects?.length > 0) {
+          log.push({ label: '简历解析', time: '', type: 'completed' });
+        }
+        if (state.answerHistory?.length) {
+          for (let i = 0; i < state.answerHistory.length; i++) {
+            const r = state.answerHistory[i];
+            const shortText = r.question?.text ? (r.question.text.length > 18 ? r.question.text.slice(0, 18) + '...' : r.question.text) : '';
+            log.push({ label: `Q${i + 1}${shortText ? ': ' + shortText : ''}`, time: '', type: 'completed' });
+            if (r.evaluation) log.push({ label: `Q${i + 1} 评估 (${r.evaluation.score}/10)`, time: '', type: 'completed' });
+          }
+        }
+        if (state.currentStage && state.currentStage !== 'done') {
+          log.push({ label: `${stageLabelMap[state.currentStage] || state.currentStage} · 进行中`, time: '', type: 'active' });
+        } else if (state.currentStage === 'done') {
+          log.push({ label: '面试完成', time: '', type: 'completed' });
+        }
+        store.stageLog = log;
       }
       store.interviewId = interviewId; store.currentStage = state.currentStage || '';
       if (startedAt) store.totalElapsed = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));

@@ -27,3 +27,6 @@ temp/
 
 # Claude Code
 .claude/
+
+# Brainstorming mockups
+.superpowers/

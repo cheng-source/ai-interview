@@ -11,6 +11,8 @@ export const useInterviewStore = defineStore("interview", () => {
   const interviewId = ref("");
   const isConnected = ref(false);
   const report = ref<any>(null);
+  const stageLog = ref<Array<{ label: string; time: string; type: 'completed' | 'active' }>>([]);
+  const evaluations = ref<Array<{ questionText: string; score: number; summary: string; stage: string }>>([]);
   let abortController: AbortController | null = null;
 
   const timer = useInterviewTimer();
@@ -46,6 +48,12 @@ export const useInterviewStore = defineStore("interview", () => {
         switch (data.type) {
           case "status":
             statusText.value = data.content;
+            // 记录到执行时间线（去重：相同标签不重复添加）
+            if (data.content && !stageLog.value.some(s => s.label === data.content && s.type === 'active')) {
+              // 将之前的 active 项标记为 completed
+              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+              stageLog.value.push({ label: data.content, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+            }
             break;
 
           case "token": {
@@ -82,6 +90,15 @@ export const useInterviewStore = defineStore("interview", () => {
           case "evaluation": {
             const ev = data.data || {};
             addMessage("system", `评分: ${ev.score}/10 — ${ev.summary || ""}`, data.stage);
+            evaluations.value.push({
+              questionText: ev.questionText || ev.question || '',
+              score: ev.score || 0,
+              summary: ev.summary || '',
+              stage: data.stage || currentStage.value,
+            });
+            // 将评估添加到时间线
+            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+            stageLog.value.push({ label: `评估完成 (${ev.score}/10)`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
             statusText.value = "";
             break;
           }
@@ -91,16 +108,26 @@ export const useInterviewStore = defineStore("interview", () => {
             currentStage.value = data.stage || currentStage.value;
             timer.tryStartTimer(data.content);
             statusText.value = "";
+            // 记录到时间线
+            if (data.stage) {
+              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+              stageLog.value.push({ label: `${data.stage}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+            }
             break;
 
           case "stage":
             currentStage.value = data.stage;
+            // 记录阶段切换
+            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+            stageLog.value.push({ label: `进入${data.stage}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
             break;
 
           case "done": {
             report.value = data.report;
             currentStage.value = "done";
             timer.stopAllTimers();
+            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+            stageLog.value.push({ label: '面试完成', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
             break;
           }
 
@@ -185,6 +212,8 @@ export const useInterviewStore = defineStore("interview", () => {
     interviewId.value = "";
     isConnected.value = false;
     report.value = null;
+    stageLog.value = [];
+    evaluations.value = [];
   };
 
   return {
@@ -195,6 +224,8 @@ export const useInterviewStore = defineStore("interview", () => {
     interviewId,
     isConnected,
     report,
+    stageLog,
+    evaluations,
     questionTimeRemaining: timer.questionTimeRemaining,
     totalElapsed: timer.totalElapsed,
     onTimeout: timer.onTimeout,
