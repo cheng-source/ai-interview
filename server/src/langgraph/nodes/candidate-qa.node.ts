@@ -27,11 +27,15 @@ async function rewriteQuery(question: string): Promise<string> {
   const rewriteLLM = createLLM({ temperature: 0, streaming: false });
   const res = await rewriteLLM.invoke([
     new SystemMessage(
-      `将以下候选人提问改写为更适合语义检索的关键词短语。
+      `你是一个检索查询改写助手。你的任务是把用户原始问题改写成更适合知识库检索的单句查询。
+
 要求：
-- 提取核心概念，去除口语化表达和无关修饰
-- 输出 2-5 个关键词或短语，用空格分隔
-- 只输出改写结果，不要解释`,
+1. 保留用户核心意图，不引入原问题没有的事实
+2. 对过短、过泛的问题补充必要语义，使其更可检索
+3. 输出必须是单行纯文本，不要 Markdown，不要解释
+4. 如果原问题已经足够具体，原样输出
+5. 如果存在对话历史，结合上下文理解用户的追问意图
+`,
     ),
     new HumanMessage(question),
   ]);
@@ -113,9 +117,7 @@ export async function candidateQaNode(state: any): Promise<any> {
 
   // 向量语义检索，优先按岗位部门过滤知识库
   const category = state.position?.department || undefined;
-  console.log("🚀 ~ candidateQaNode ~ category:", category);
   pushEvent({ type: "status", content: "正在检索知识库..." });
-  console.log("🚀 ~ candidateQaNode ~ candidateQuestion:", candidateQuestion);
   const knowledge = candidateQuestion
     ? await vectorSearchKnowledge(candidateQuestion, category)
     : "";

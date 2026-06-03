@@ -49,7 +49,6 @@ export function createInterviewGraph() {
     .addNode("behavioral_next_question", behavioralNextQuestionNode)
     .addNode("candidate_qa", candidateQaNode)
     .addNode("generate_report", generateReportNode)
-
     .addEdge(START, "icebreaker")
     .addEdge("icebreaker", "parse_resume")
     .addConditionalEdges("parse_resume", routeAfterParse, {
