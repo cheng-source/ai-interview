@@ -3,7 +3,14 @@ import {
   HumanMessage,
   SystemMessage,
 } from "@langchain/core/messages";
-import { createLLM, createEmbeddings, setCallType, rerank } from "../llm";
+import { interrupt } from "@langchain/langgraph";
+import {
+  createLLM,
+  createEmbeddings,
+  setCallType,
+  rerank,
+  pushEvent,
+} from "../llm";
 import { candidateQaPersona } from "../personas/candidate-qa.persona";
 import { PrismaClient } from "@prisma/client";
 
@@ -28,11 +35,15 @@ async function rewriteQuery(question: string): Promise<string> {
     ),
     new HumanMessage(question),
   ]);
+  console.log("🚀 ~ rewriteQuery ~ res:", res);
   const text = typeof res.content === "string" ? res.content : "";
   return text.trim() || question;
 }
 
-async function vectorSearchKnowledge(query: string, category?: string): Promise<string> {
+async function vectorSearchKnowledge(
+  query: string,
+  category?: string,
+): Promise<string> {
   if (!query.trim()) return "";
   try {
     const searchQuery = await rewriteQuery(query);
@@ -54,6 +65,7 @@ async function vectorSearchKnowledge(query: string, category?: string): Promise<
       `[${queryVector.join(",")}]`,
       ...(category ? [category] : []),
     );
+    console.log("🚀 ~ vectorSearchKnowledge ~ results:", results);
 
     const candidates = results.filter((r) => r.similarity >= 0.3);
 
@@ -78,17 +90,32 @@ async function vectorSearchKnowledge(query: string, category?: string): Promise<
 }
 
 export async function candidateQaNode(state: any): Promise<any> {
+  const candidateQuestion = state.candidateAnswer || "";
+  const qaCount = state.qaCount || 0;
+
+  // 首次进入反问环节（刚从技术/行为面切换过来）：发送提示，等待候选人提问
+  if (!candidateQuestion.trim()) {
+    const prompt =
+      qaCount === 0
+        ? "面试环节已结束，现在是反问环节。你对公司有什么想了解的吗？可以问我关于技术栈、团队架构、企业文化、福利制度、职业发展等方面的问题。"
+        : "还有其他想了解的吗？";
+    pushEvent({ type: "message", content: prompt, stage: "candidate_qa" });
+    pushEvent({ type: "stage", stage: "candidate_qa" });
+    interrupt({ type: "waiting_for_question" });
+    return { messages: [new AIMessage(prompt)], currentStage: "candidate_qa" };
+  }
+
   setCallType("text");
   const llm = createLLM({
     temperature: candidateQaPersona.temperature,
     streaming: candidateQaPersona.streaming,
   });
 
-  const candidateQuestion = state.candidateAnswer || "";
-  const qaCount = state.qaCount || 0;
-
   // 向量语义检索，优先按岗位部门过滤知识库
   const category = state.position?.department || undefined;
+  console.log("🚀 ~ candidateQaNode ~ category:", category);
+  pushEvent({ type: "status", content: "正在检索知识库..." });
+  console.log("🚀 ~ candidateQaNode ~ candidateQuestion:", candidateQuestion);
   const knowledge = candidateQuestion
     ? await vectorSearchKnowledge(candidateQuestion, category)
     : "";
@@ -97,6 +124,7 @@ export async function candidateQaNode(state: any): Promise<any> {
     ? `${candidateQaPersona.systemPrompt}\n\n以下是从公司知识库检索到的相关信息，请据此回答：\n${knowledge}\n\n这是第${qaCount}个问题，最多回答5个问题。`
     : `${candidateQaPersona.systemPrompt}\n这是第${qaCount}个问题，最多回答5个问题。`;
 
+  pushEvent({ type: "status", content: "正在生成回答..." });
   const response = await llm.invoke([
     new SystemMessage(systemPrompt),
     new HumanMessage(candidateQuestion || "你好，我想了解一下..."),

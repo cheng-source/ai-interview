@@ -1,20 +1,20 @@
-import { END } from '@langchain/langgraph';
+import { END } from "@langchain/langgraph";
 
 export function routeAfterParse(state: any): string {
-  if (state.interviewType === 'behavioral') return 'behavioral_select';
-  return 'tech_select';
+  if (state.interviewType === "behavioral") return "behavioral_select";
+  return "tech_select";
 }
 
 export function routeAfterIcebreaker(state: any): string {
-  return 'parse_resume';
+  return "parse_resume";
 }
 
 export function routeInTechnical(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
 
-  if (!lastRecord || lastRecord.stage !== 'technical') {
-    return 'tech_ask';
+  if (!lastRecord || lastRecord.stage !== "technical") {
+    return "tech_ask";
   }
 
   const evaluation = lastRecord.evaluation || {};
@@ -24,30 +24,30 @@ export function routeInTechnical(state: any): string {
   const maxQuestions = projects.length + 2; // 所有项目 + 最多2道八股文
 
   if (evaluation.isSurfaceLevel && depth < 3) {
-    return 'tech_follow_up';
+    return "tech_follow_up";
   }
 
   if (questionsAsked.length < maxQuestions) {
-    return 'tech_next_topic';
+    return "tech_next_topic";
   }
 
-  return 'candidate_qa';
+  return "candidate_qa";
 }
 
 export function routeAfterTechFollowUp(state: any): string {
-  return 'tech_evaluate';
+  return "tech_evaluate";
 }
 
 export function routeAfterTechNextTopic(state: any): string {
-  return 'tech_select';
+  return "tech_select";
 }
 
 export function routeInBehavioral(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
 
-  if (!lastRecord || lastRecord.stage !== 'behavioral') {
-    return 'behavioral_ask';
+  if (!lastRecord || lastRecord.stage !== "behavioral") {
+    return "behavioral_ask";
   }
 
   const evaluation = lastRecord.evaluation || {};
@@ -57,29 +57,29 @@ export function routeInBehavioral(state: any): string {
   const questionsAsked = behavioralRound.questionsAsked || [];
 
   if (evaluation.isVague && depth < 2) {
-    return 'behavioral_follow_up';
+    return "behavioral_follow_up";
   }
 
   if (questionsAsked.length < competencies.length) {
-    return 'behavioral_next_question';
+    return "behavioral_next_question";
   }
 
-  return 'candidate_qa';
+  return "candidate_qa";
 }
 
 export function routeAfterBehavioralFollowUp(state: any): string {
-  return 'behavioral_evaluate';
+  return "behavioral_evaluate";
 }
 
 export function routeAfterBehavioralNextQuestion(state: any): string {
-  return 'behavioral_select';
+  return "behavioral_select";
 }
 
 export function routeAfterCandidateQA(state: any): string {
   if ((state.qaCount || 0) >= 5) {
-    return 'generate_report';
+    return "generate_report";
   }
-  return '__end__';
+  return "__end__";
 }
 
 export function routeAfterReport(state: any): string {

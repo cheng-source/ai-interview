@@ -64,6 +64,13 @@ export const knowledgeApi = {
   search: (q: string) => api.get('/knowledge/search', { params: { q } }),
   upload: (data: { title: string; content: string; category: string }) =>
     api.post('/knowledge', data),
+  uploadFile: (title: string, category: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('title', title);
+    form.append('category', category);
+    return api.post('/knowledge/upload-file', form);
+  },
   delete: (id: string) => api.delete(`/knowledge/${id}`),
 };
 

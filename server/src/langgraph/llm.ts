@@ -35,7 +35,9 @@ class TokenQueue {
         if (self.closed) {
           return Promise.resolve({ value: undefined, done: true });
         }
-        return new Promise((r) => { self.waiter = r; });
+        return new Promise((r) => {
+          self.waiter = r;
+        });
       },
     };
   }
@@ -43,7 +45,7 @@ class TokenQueue {
 
 // ---- per-request streaming context ----
 let currentQueue: TokenQueue | null = null;
-let currentCallType: 'text' | 'structured' | 'none' = 'none';
+let currentCallType: "text" | "structured" | "none" = "none";
 
 export function createStreamingContext(): TokenQueue {
   const queue = new TokenQueue();
@@ -53,10 +55,10 @@ export function createStreamingContext(): TokenQueue {
 
 export function clearStreamingContext() {
   currentQueue = null;
-  currentCallType = 'none';
+  currentCallType = "none";
 }
 
-export function setCallType(type: 'text' | 'structured') {
+export function setCallType(type: "text" | "structured") {
   currentCallType = type;
 }
 
@@ -71,14 +73,16 @@ class StreamingHandler extends BaseCallbackHandler {
   name = "streaming_handler";
 
   handleLLMNewToken(token: string) {
-    if (currentQueue && token && currentCallType === 'text') {
+    if (currentQueue && token && currentCallType === "text") {
       currentQueue.push({ type: "token", content: token });
     }
   }
 }
 
 // ---- LLM factory ----
-export function createLLM(options: { temperature?: number; streaming?: boolean } = {}) {
+export function createLLM(
+  options: { temperature?: number; streaming?: boolean } = {},
+) {
   const opts: any = {
     model: process.env.LLM_MODEL || "deepseek-v4-pro",
     temperature: options.temperature ?? 0.5,
@@ -91,7 +95,11 @@ export function createLLM(options: { temperature?: number; streaming?: boolean }
     opts.streaming = true;
     opts.callbacks = [new StreamingHandler()];
   }
-  return new ChatOpenAI(opts);
+  const llm = new ChatOpenAI(opts);
+  // 覆盖 modelName 为 tiktoken 已知的模型，避免 "Unknown model" 警告
+  // model 保持不变用于 API 请求，modelName 仅用于 token 估算
+  llm.modelName = "gpt-4";
+  return llm;
 }
 
 // ---- Embedding factory ----
@@ -100,13 +108,15 @@ let cachedEmbeddings: OpenAIEmbeddings | null = null;
 export function createEmbeddings(): OpenAIEmbeddings {
   if (!cachedEmbeddings) {
     const opts: any = {
-      modelName: process.env.EMBEDDING_MODEL || 'text-embedding-v3',
+      modelName: process.env.EMBEDDING_MODEL || "text-embedding-v3",
       openAIApiKey: process.env.EMBEDDING_API_KEY,
       configuration: {
-        baseURL: process.env.EMBEDDING_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        baseURL:
+          process.env.EMBEDDING_BASE_URL ||
+          "https://dashscope.aliyuncs.com/compatible-mode/v1",
       },
     };
-    const dims = parseInt(process.env.EMBEDDING_DIMENSIONS || '', 10);
+    const dims = parseInt(process.env.EMBEDDING_DIMENSIONS || "", 10);
     if (!isNaN(dims)) {
       opts.dimensions = dims;
     }
@@ -123,7 +133,7 @@ export async function rerank(
 ): Promise<{ content: string; score: number }[]> {
   if (!documents.length) return [];
   const res = await fetch(
-    `${process.env.EMBEDDING_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1"}/../../services/reranker/text-reranking/text-reranking`,
+    "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
     {
       method: "POST",
       headers: {
@@ -131,10 +141,9 @@ export async function rerank(
         Authorization: `Bearer ${process.env.EMBEDDING_API_KEY}`,
       },
       body: JSON.stringify({
-        model: process.env.RERANK_MODEL || "gte-rerank",
-        query,
-        documents,
-        top_n: topN,
+        model: process.env.RERANK_MODEL || "gte-rerank-v2",
+        input: { query, documents },
+        parameters: { top_n: topN },
       }),
     },
   );

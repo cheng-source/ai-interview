@@ -1,85 +1,80 @@
 import { StateGraph, END, START } from "@langchain/langgraph";
 import { InterviewStateAnnotation } from "./state";
 
-// import { parseResumeNode } from "./nodes/parse-resume.node";
-// import { icebreakerNode } from "./nodes/icebreaker.node";
-// import {
-//   techSelectNode,
-//   techAskNode,
-//   techEvaluateNode,
-//   techFollowUpNode,
-//   techNextTopicNode,
-// } from "./nodes/technical-round.node";
-// import {
-//   behavioralSelectNode,
-//   behavioralAskNode,
-//   behavioralEvaluateNode,
-//   behavioralFollowUpNode,
-//   behavioralNextQuestionNode,
-// } from "./nodes/behavioral-round.node";
+import { parseResumeNode } from "./nodes/parse-resume.node";
+import { icebreakerNode } from "./nodes/icebreaker.node";
+import {
+  techSelectNode,
+  techAskNode,
+  techEvaluateNode,
+  techFollowUpNode,
+  techNextTopicNode,
+} from "./nodes/technical-round.node";
+import {
+  behavioralSelectNode,
+  behavioralAskNode,
+  behavioralEvaluateNode,
+  behavioralFollowUpNode,
+  behavioralNextQuestionNode,
+} from "./nodes/behavioral-round.node";
 import { candidateQaNode } from "./nodes/candidate-qa.node";
 import { generateReportNode } from "./nodes/generate-report.node";
 
 import {
-  // routeAfterParse,
-  // routeAfterIcebreaker,
-  // routeInTechnical,
-  // routeAfterTechFollowUp,
-  // routeAfterTechNextTopic,
-  // routeInBehavioral,
-  // routeAfterBehavioralFollowUp,
-  // routeAfterBehavioralNextQuestion,
+  routeAfterParse,
+  routeAfterIcebreaker,
+  routeInTechnical,
+  routeAfterTechFollowUp,
+  routeAfterTechNextTopic,
+  routeInBehavioral,
+  routeAfterBehavioralFollowUp,
+  routeAfterBehavioralNextQuestion,
   routeAfterCandidateQA,
-  // routeAfterReport,
+  routeAfterReport,
 } from "./routing";
 
 export function createInterviewGraph() {
   const graph = new StateGraph(InterviewStateAnnotation)
-    // .addNode("parse_resume", parseResumeNode)
-    // .addNode("icebreaker", icebreakerNode)
-    // .addNode("tech_select", techSelectNode)
-    // .addNode("tech_ask", techAskNode)
-    // .addNode("tech_evaluate", techEvaluateNode)
-    // .addNode("tech_follow_up", techFollowUpNode)
-    // .addNode("tech_next_topic", techNextTopicNode)
-    // .addNode("behavioral_select", behavioralSelectNode)
-    // .addNode("behavioral_ask", behavioralAskNode)
-    // .addNode("behavioral_evaluate", behavioralEvaluateNode)
-    // .addNode("behavioral_follow_up", behavioralFollowUpNode)
-    // .addNode("behavioral_next_question", behavioralNextQuestionNode)
+    .addNode("parse_resume", parseResumeNode)
+    .addNode("icebreaker", icebreakerNode)
+    .addNode("tech_select", techSelectNode)
+    .addNode("tech_ask", techAskNode)
+    .addNode("tech_evaluate", techEvaluateNode)
+    .addNode("tech_follow_up", techFollowUpNode)
+    .addNode("tech_next_topic", techNextTopicNode)
+    .addNode("behavioral_select", behavioralSelectNode)
+    .addNode("behavioral_ask", behavioralAskNode)
+    .addNode("behavioral_evaluate", behavioralEvaluateNode)
+    .addNode("behavioral_follow_up", behavioralFollowUpNode)
+    .addNode("behavioral_next_question", behavioralNextQuestionNode)
     .addNode("candidate_qa", candidateQaNode)
     .addNode("generate_report", generateReportNode)
 
-    // 直达 candidate_qa（跳过技术面+行为面）
-    .addEdge(START, "candidate_qa")
+    .addEdge(START, "icebreaker")
+    .addEdge("icebreaker", "parse_resume")
+    .addConditionalEdges("parse_resume", routeAfterParse, {
+      tech_select: "tech_select",
+      behavioral_select: "behavioral_select",
+    })
+    .addEdge("tech_select", "tech_ask")
+    .addEdge("tech_ask", "tech_evaluate")
+    .addConditionalEdges("tech_evaluate", routeInTechnical, {
+      tech_follow_up: "tech_follow_up",
+      tech_next_topic: "tech_next_topic",
+      candidate_qa: "candidate_qa",
+    })
+    .addEdge("tech_follow_up", "tech_evaluate")
+    .addEdge("tech_next_topic", "tech_select")
 
-    // ======== 技术面（已注释）========
-    // .addEdge(START, "icebreaker")
-    // .addEdge("icebreaker", "parse_resume")
-    // .addConditionalEdges("parse_resume", routeAfterParse, {
-    //   tech_select: "tech_select",
-    //   behavioral_select: "behavioral_select",
-    // })
-    // .addEdge("tech_select", "tech_ask")
-    // .addEdge("tech_ask", "tech_evaluate")
-    // .addConditionalEdges("tech_evaluate", routeInTechnical, {
-    //   tech_follow_up: "tech_follow_up",
-    //   tech_next_topic: "tech_next_topic",
-    //   candidate_qa: "candidate_qa",
-    // })
-    // .addEdge("tech_follow_up", "tech_evaluate")
-    // .addEdge("tech_next_topic", "tech_select")
-
-    // ======== 行为面（已注释）========
-    // .addEdge("behavioral_select", "behavioral_ask")
-    // .addEdge("behavioral_ask", "behavioral_evaluate")
-    // .addConditionalEdges("behavioral_evaluate", routeInBehavioral, {
-    //   behavioral_follow_up: "behavioral_follow_up",
-    //   behavioral_next_question: "behavioral_next_question",
-    //   candidate_qa: "candidate_qa",
-    // })
-    // .addEdge("behavioral_follow_up", "behavioral_evaluate")
-    // .addEdge("behavioral_next_question", "behavioral_select")
+    .addEdge("behavioral_select", "behavioral_ask")
+    .addEdge("behavioral_ask", "behavioral_evaluate")
+    .addConditionalEdges("behavioral_evaluate", routeInBehavioral, {
+      behavioral_follow_up: "behavioral_follow_up",
+      behavioral_next_question: "behavioral_next_question",
+      candidate_qa: "candidate_qa",
+    })
+    .addEdge("behavioral_follow_up", "behavioral_evaluate")
+    .addEdge("behavioral_next_question", "behavioral_select")
 
     .addConditionalEdges("candidate_qa", routeAfterCandidateQA, {
       generate_report: "generate_report",

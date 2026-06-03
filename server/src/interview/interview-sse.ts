@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage } from "@langchain/core/messages";
 import { createStreamingContext, clearStreamingContext, getOrStartResumeParse } from "../langgraph/llm";
 import { doParseResume } from "../langgraph/nodes/parse-resume.node";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -147,7 +147,7 @@ export async function* streamAnswer(deps: SseDeps, interviewId: string, userMess
 
   const graphTask = (async () => {
     try {
-      await deps.graph.updateState(config, { candidateAnswer: userMessage, messages: [new HumanMessage(userMessage)] });
+      await deps.graph.updateState(config, { candidateAnswer: userMessage });
       const stream = await deps.graph.stream(null, config);
       for await (const chunk of stream) {
         const nodeName = Object.keys(chunk)[0];
@@ -173,8 +173,9 @@ export async function* streamAnswer(deps: SseDeps, interviewId: string, userMess
           });
         }
       }
-    } catch (e) {
-      queue.push({ type: "error", message: String(e) });
+    } catch (e: any) {
+      const isInterrupt = e?.name === "GraphInterrupt" || e?.constructor?.name === "GraphInterrupt";
+      if (!isInterrupt) queue.push({ type: "error", message: String(e) });
     } finally {
       // 每次 interrupt 都存 DB，确保刷新/重启可恢复
       try {
