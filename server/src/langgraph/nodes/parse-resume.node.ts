@@ -3,20 +3,30 @@ import { executePersona } from "../personas/persona-executor";
 import { resumeParserPersona } from "../personas/resume-parser.persona";
 import { getOrStartResumeParse } from "../llm";
 
-export async function doParseResume(resumeText: string, jdText: string, candidateIntro?: string, options?: { silent?: boolean }) {
+export async function doParseResume(
+  resumeText: string,
+  jdText: string,
+  candidateIntro?: string,
+  options?: { silent?: boolean },
+) {
   const introHint = candidateIntro
     ? `\n候选人自我介绍：${candidateIntro}\n请结合自我介绍交叉验证简历信息。`
     : "";
 
-  const { response: result } = await executePersona(resumeParserPersona, new HumanMessage(
-    `简历内容：${resumeText}\n\n岗位JD：${jdText}${introHint}`,
-  ), options);
+  const { response: result } = await executePersona(
+    resumeParserPersona,
+    new HumanMessage(
+      `简历内容：${resumeText}\n\n岗位JD：${jdText}${introHint}`,
+    ),
+    options,
+  );
 
   const skills = result.skillCategories || [];
   const projects = result.projects || [];
   const projectTopics = projects.map((p: any) => p.name);
   const conceptTopics = skills.slice(0, 2).map((s: any) => s.category);
   const allTopics = [...projectTopics, ...conceptTopics];
+  console.log("🚀 ~ doParseResume ~ allTopics:", allTopics);
 
   return {
     candidate: {
@@ -32,7 +42,10 @@ export async function doParseResume(resumeText: string, jdText: string, candidat
 }
 
 export async function parseResumeNode(state: any): Promise<any> {
-  if (state.candidate?.skills?.length > 0 || state.candidate?.projects?.length > 0) {
+  if (
+    state.candidate?.skills?.length > 0 ||
+    state.candidate?.projects?.length > 0
+  ) {
     return {};
   }
 
@@ -42,12 +55,20 @@ export async function parseResumeNode(state: any): Promise<any> {
   const threadId = (state as any).threadId || "";
 
   // 等待后台解析完成（共享 Promise，不会重复调 LLM）
-  const result = await getOrStartResumeParse(threadId, () => doParseResume(resumeText, jdText, candidateIntro));
+  const result = await getOrStartResumeParse(threadId, () =>
+    doParseResume(resumeText, jdText, candidateIntro),
+  );
 
   if (result) {
     return {
       candidate: result.candidate,
-      techRound: { currentTopic: "", currentQuestion: null, questionsAsked: [], depth: 0, topics: result.topics },
+      techRound: {
+        currentTopic: "",
+        currentQuestion: null,
+        questionsAsked: [],
+        depth: 0,
+        topics: result.topics,
+      },
     };
   }
 

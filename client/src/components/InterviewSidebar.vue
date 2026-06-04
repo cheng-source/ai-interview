@@ -1,5 +1,11 @@
 <template>
-  <div class="flex flex-col w-[260px] bg-gray-50 border-l border-gray-200 text-sm shrink-0 h-full">
+  <div class="relative flex shrink-0 h-full" :style="{ width: sidebarWidth + 'px' }">
+    <!-- 拖拽手柄 -->
+    <div
+      class="absolute left-0 top-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400/30 transition-colors z-10"
+      @mousedown.prevent="startResize"
+    />
+    <div class="flex flex-col w-full bg-gray-50 border-l border-gray-200 text-sm h-full">
     <!-- Tab 头部 -->
     <div class="flex bg-white border-b border-gray-200 shrink-0">
       <button
@@ -100,6 +106,7 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -108,6 +115,29 @@ import { useInterviewStore } from '../stores/interview';
 
 const store = useInterviewStore();
 const activeTab = ref<'status' | 'scorecard'>('status');
+
+// 侧边栏拖拽拉伸
+const sidebarWidth = ref(260);
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 500;
+
+function startResize(e: MouseEvent) {
+  const startX = e.clientX;
+  const startWidth = sidebarWidth.value;
+  const onMove = (ev: MouseEvent) => {
+    sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + (startX - ev.clientX)));
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
 
 const tabs = [
   { key: 'status' as const, label: '🤖 AI 状态' },

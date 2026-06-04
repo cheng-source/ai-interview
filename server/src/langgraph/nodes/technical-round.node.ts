@@ -121,10 +121,6 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   };
 }
 
-export async function techAskNode(_state: any): Promise<any> {
-  return {};
-}
-
 export async function techEvaluateNode(state: any): Promise<any> {
   const question = state.techRound.currentQuestion;
   const candidateAnswer = state.candidateAnswer || "";

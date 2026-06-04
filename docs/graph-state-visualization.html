@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面试图状态可视化</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card: #fff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 24px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  /* Section cards */
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend .dot {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+  .dot.write { background: #3b82f6; }
+  .dot.read  { background: #22c55e; }
+  .dot.append{ background: #8b5cf6; }
+  .dot.merge { background: #f59e0b; }
+  .dot.clear { background: #ef4444; }
+  .dot.interrupt { background: #ec4899; }
+
+  /* Mermaid wrapper */
+  .mermaid-wrap {
+    overflow-x: auto;
+    background: #fafbfc;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+
+  /* Matrix table */
+  .matrix-wrap { overflow-x: auto; }
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 900px;
+  }
+  .matrix th, .matrix td {
+    padding: 8px 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .matrix thead th {
+    background: #f0f4ff;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    font-size: 12px;
+  }
+  .matrix thead th:first-child {
+    text-align: left;
+    min-width: 140px;
+  }
+  .matrix tbody td:first-child {
+    text-align: left;
+    font-weight: 500;
+    white-space: nowrap;
+    background: #fafbfc;
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    font-size: 12px;
+  }
+  .cell-write { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+  .cell-read  { background: #dcfce7; color: #15803d; }
+  .cell-append{ background: #ede9fe; color: #6d28d9; font-weight: 600; }
+  .cell-merge { background: #fef3c7; color: #b45309; font-weight: 600; }
+  .cell-clear { background: #fce4ec; color: #b91c1c; }
+  .cell-interrupt { background: #fce7f3; color: #be185d; font-weight: 600; }
+  .cell-readwrite { background: linear-gradient(135deg, #dbeafe 50%, #dcfce7 50%); color: #1d4ed8; font-weight: 600; }
+  .cell-readclear { background: linear-gradient(135deg, #dcfce7 50%, #fce4ec 50%); color: #15803d; font-weight: 600; }
+
+  /* Heatmap bars */
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 768px) { .heatmap-grid { grid-template-columns: 1fr; } }
+  .heatmap h3 { font-size: 14px; margin-bottom: 12px; color: var(--muted); }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .bar-label {
+    width: 160px;
+    font-size: 12px;
+    text-align: right;
+    flex-shrink: 0;
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  .bar-track {
+    flex: 1;
+    height: 18px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .3s;
+  }
+  .bar-fill.read { background: linear-gradient(90deg, #86efac, #22c55e); }
+  .bar-fill.write{ background: linear-gradient(90deg, #93c5fd, #3b82f6); }
+  .bar-num {
+    width: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  /* Reducer cards */
+  .reducer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 768px) { .reducer-grid { grid-template-columns: 1fr; } }
+  .reducer-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .reducer-card h3 {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .reducer-card .fields {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  .reducer-card .example {
+    font-size: 12px;
+    background: #fafbfc;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    white-space: pre;
+  }
+  .repl { border-left: 3px solid var(--blue); }
+  .appd { border-left: 3px solid var(--purple); }
+  .merg { border-left: 3px solid var(--amber); }
+
+  /* Interrupt */
+  .interrupt-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 768px) { .interrupt-list { grid-template-columns: 1fr; } }
+  .interrupt-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .interrupt-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #ec4899;
+    flex-shrink: 0;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .3; }
+  }
+  .interrupt-info { flex: 1; }
+  .interrupt-node { font-weight: 600; font-size: 13px; }
+  .interrupt-desc { font-size: 12px; color: var(--muted); }
+  .interrupt-resume { font-size: 11px; color: var(--muted); font-family: 'SF Mono', Consolas, monospace; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🧠 面试图状态可视化</h1>
+<p class="subtitle">12 个节点 · 13 个状态字段 · 3 种 Reducer · 4 个中断点</p>
+
+<!-- ============ 1. Mermaid 图 ============ -->
+<section>
+  <h2><span class="num">1</span> 图结构总览</h2>
+  <div class="legend">
+    <span><span class="dot write"></span> 写入</span>
+    <span><span class="dot read"></span> 读取</span>
+    <span><span class="dot append"></span> 追加</span>
+    <span><span class="dot merge"></span> 合并</span>
+    <span><span class="dot clear"></span> 清空</span>
+    <span><span class="dot interrupt"></span> 中断点</span>
+  </div>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TD
+    START((START)) --> icebreaker
+
+    icebreaker["🧊 icebreaker
+    破冰
+    ────────
+    ✍ candidateIntro
+    ✍ currentStage
+    🧹 candidateAnswer
+    ⏸️ 等待自我介绍"] --> parse_resume
+
+    parse_resume["📄 parse_resume
+    简历解析
+    ────────
+    ✍ candidate
+    ✍ techRound.topics
+    📖 position, resumeText"] --> tech_select
+
+    tech_select["🎯 tech_select
+    技术出题
+    ────────
+    ➕ messages 题目
+    ✍ techRound
+    ✍ currentStage
+    📖 candidate, position"] --> tech_evaluate
+
+    tech_evaluate["📊 tech_evaluate
+    技术评估
+    ────────
+    ➕ answerHistory
+    🔀 scores.technical
+    🧹 candidateAnswer
+    📖 techRound
+    ⏸️ 等待回答"] -->|回答浅显 深度<3| tech_follow_up
+    tech_evaluate -->|还有剩余主题| tech_next_topic
+    tech_evaluate -->|题量达标| candidate_qa
+
+    tech_follow_up["🔁 tech_follow_up
+    技术追问
+    ────────
+    ➕ messages 追问
+    ✍ techRound.depth
+    📖 techRound, answerHistory"] --> tech_evaluate
+
+    tech_next_topic["⏭️ tech_next_topic
+    下一主题
+    ────────
+    ✍ techRound"] --> tech_select
+
+    behavioral_select["🎯 behavioral_select
+    行为出题
+    ────────
+    ➕ messages 题目
+    ✍ behavioralRound
+    ✍ currentStage
+    📖 position, candidateIntro"] --> behavioral_evaluate
+
+    behavioral_evaluate["📊 behavioral_evaluate
+    行为评估
+    ────────
+    ➕ answerHistory
+    🔀 scores.behavioral
+    🧹 candidateAnswer
+    📖 behavioralRound
+    ⏸️ 等待回答"] -->|回答模糊 深度<2| behavioral_follow_up
+    behavioral_evaluate -->|还有能力项| behavioral_next_question
+    behavioral_evaluate -->|能力项耗尽| candidate_qa
+
+    behavioral_follow_up["🔁 behavioral_follow_up
+    行为追问
+    ────────
+    ➕ messages 追问
+    ✍ behavioralRound.depth
+    📖 answerHistory"] --> behavioral_evaluate
+
+    behavioral_next_question["⏭️ behavioral_next_question
+    下一能力项
+    ────────
+    ✍ behavioralRound"] --> behavioral_select
+
+    candidate_qa["💬 candidate_qa
+    反问环节
+    ────────
+    ➕ messages 回答
+    ✍ qaCount
+    ✍ currentStage
+    🧹 candidateAnswer
+    📖 position
+    ⏸️ 等待提问"] -->|qaCount ≥ 5| generate_report
+    candidate_qa -->|qaCount < 5| candidate_qa
+
+    generate_report["📝 generate_report
+    生成报告
+    ────────
+    ➕ messages 报告
+    🔀 scores 最终
+    ✍ currentStage='done'
+    ✍ finalReport
+    📖 candidate, position, answerHistory"] --> END((END))
+
+    style icebreaker fill:#e3f2fd,stroke:#90caf9
+    style parse_resume fill:#fff3e0,stroke:#ffcc80
+    style tech_select fill:#e8f5e9,stroke:#a5d6a7
+    style tech_evaluate fill:#fce4ec,stroke:#f48fb1
+    style tech_follow_up fill:#f3e5f5,stroke:#ce93d8
+    style tech_next_topic fill:#e0f2f1,stroke:#80cbc4
+    style behavioral_select fill:#e8f5e9,stroke:#a5d6a7
+    style behavioral_evaluate fill:#fce4ec,stroke:#f48fb1
+    style behavioral_follow_up fill:#f3e5f5,stroke:#ce93d8
+    style behavioral_next_question fill:#e0f2f1,stroke:#80cbc4
+    style candidate_qa fill:#fff9c4,stroke:#fff176
+    style generate_report fill:#ffccbc,stroke:#ffab91
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. Matrix ============ -->
+<section>
+  <h2><span class="num">2</span> 字段 × 节点 读写矩阵</h2>
+  <div class="matrix-wrap">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>字段</th>
+          <th>🧊<br>icebreaker</th>
+          <th>📄<br>parse</th>
+          <th>🎯<br>tech<br>select</th>
+          <th>📊<br>tech<br>eval</th>
+          <th>🔁<br>tech<br>follow</th>
+          <th>⏭️<br>tech<br>next</th>
+          <th>🎯<br>behav<br>select</th>
+          <th>📊<br>behav<br>eval</th>
+          <th>🔁<br>behav<br>follow</th>
+          <th>⏭️<br>behav<br>next</th>
+          <th>💬<br>qa</th>
+          <th>📝<br>report</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>candidate</td>
+          <td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          <td class="cell-read">📖</td>
+        </tr>
+        <tr>
+          <td>position</td>
+          <td></td>
+          <td class="cell-read">📖</td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td>
+          <td class="cell-read">📖</td>
+          <td class="cell-read">📖</td>
+        </tr>
+        <tr>
+          <td>currentStage</td>
+          <td class="cell-write">✍</td><td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td><td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td><td></td><td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td>
+        </tr>
+        <tr>
+          <td>candidateAnswer</td>
+          <td class="cell-readclear">📖🧹</td><td></td><td></td>
+          <td class="cell-readclear">📖🧹</td><td></td><td></td><td></td>
+          <td class="cell-readclear">📖🧹</td><td></td><td></td>
+          <td class="cell-readclear">📖🧹</td><td></td>
+        </tr>
+        <tr>
+          <td>candidateIntro</td>
+          <td class="cell-write">✍</td><td></td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr>
+          <td>resumeText</td>
+          <td></td>
+          <td class="cell-read">📖</td>
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr>
+          <td>interviewType</td>
+          <td colspan="12" style="color:#999; font-style:italic">仅由路由函数读取，所有节点不碰此字段</td>
+        </tr>
+        <tr>
+          <td>qaCount</td>
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          <td class="cell-readwrite">📖✍</td><td></td>
+        </tr>
+        <tr>
+          <td style="color:#6d28d9">messages ➕</td>
+          <td></td><td></td>
+          <td class="cell-append">➕</td><td></td>
+          <td class="cell-append">➕</td><td></td>
+          <td class="cell-append">➕</td><td></td>
+          <td class="cell-append">➕</td><td></td>
+          <td class="cell-append">➕</td>
+          <td class="cell-append">➕</td>
+        </tr>
+        <tr>
+          <td style="color:#6d28d9">answerHistory ➕</td>
+          <td></td><td></td><td></td>
+          <td class="cell-append">➕</td><td></td><td></td><td></td>
+          <td class="cell-append">➕</td><td></td><td></td><td></td>
+          <td class="cell-read">📖</td>
+        </tr>
+        <tr>
+          <td style="color:#b45309">scores 🔀</td>
+          <td></td><td></td><td></td>
+          <td class="cell-merge">🔀</td><td></td><td></td><td></td>
+          <td class="cell-merge">🔀</td><td></td><td></td><td></td>
+          <td class="cell-merge">🔀</td>
+        </tr>
+        <tr>
+          <td>techRound</td>
+          <td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td>
+          <td class="cell-read">📖</td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td>
+          <td></td><td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr>
+          <td>behavioralRound</td>
+          <td></td><td></td><td></td><td></td><td></td><td></td>
+          <td class="cell-write">✍</td>
+          <td class="cell-read">📖</td>
+          <td class="cell-write">✍</td>
+          <td class="cell-write">✍</td>
+          <td></td><td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3. Heatmap ============ -->
+<section>
+  <h2><span class="num">3</span> 节点读写热度</h2>
+  <div class="heatmap-grid">
+    <div class="heatmap">
+      <h3>📖 读取字段数（依赖度）</h3>
+      <div class="bar-row"><span class="bar-label">icebreaker</span><div class="bar-track"><div class="bar-fill read" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">parse_resume</span><div class="bar-track"><div class="bar-fill read" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_select</span><div class="bar-track"><div class="bar-fill read" style="width:60%"></div></div><span class="bar-num">3</span></div>
+      <div class="bar-row"><span class="bar-label">tech_evaluate</span><div class="bar-track"><div class="bar-fill read" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_follow_up</span><div class="bar-track"><div class="bar-fill read" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_next_topic</span><div class="bar-track"><div class="bar-fill read" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_select</span><div class="bar-track"><div class="bar-fill read" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_evaluate</span><div class="bar-track"><div class="bar-fill read" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_follow_up</span><div class="bar-track"><div class="bar-fill read" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_next_question</span><div class="bar-track"><div class="bar-fill read" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">candidate_qa</span><div class="bar-track"><div class="bar-fill read" style="width:60%"></div></div><span class="bar-num">3</span></div>
+      <div class="bar-row"><span class="bar-label">generate_report</span><div class="bar-track"><div class="bar-fill read" style="width:60%"></div></div><span class="bar-num">3</span></div>
+    </div>
+    <div class="heatmap">
+      <h3>✍ 写入字段数（副作用）</h3>
+      <div class="bar-row"><span class="bar-label">icebreaker</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">parse_resume</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_select</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_evaluate</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_follow_up</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">tech_next_topic</span><div class="bar-track"><div class="bar-fill write" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_select</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_evaluate</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_follow_up</span><div class="bar-track"><div class="bar-fill write" style="width:40%"></div></div><span class="bar-num">2</span></div>
+      <div class="bar-row"><span class="bar-label">behavioral_next_question</span><div class="bar-track"><div class="bar-fill write" style="width:20%"></div></div><span class="bar-num">1</span></div>
+      <div class="bar-row"><span class="bar-label">candidate_qa</span><div class="bar-track"><div class="bar-fill write" style="width:60%"></div></div><span class="bar-num">3</span></div>
+      <div class="bar-row"><span class="bar-label">generate_report</span><div class="bar-track"><div class="bar-fill write" style="width:80%"></div></div><span class="bar-num">4</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. Reducer ============ -->
+<section>
+  <h2><span class="num">4</span> 三种 Reducer 行为</h2>
+  <div class="reducer-grid">
+    <div class="reducer-card repl">
+      <h3>🔁 替换 replace (默认)</h3>
+      <div class="fields">currentStage · candidate · position · techRound · behavioralRound · qaCount · candidateAnswer · resumeText · candidateIntro · interviewType</div>
+      <div class="example">currentStage
+'icebreaker' → 'technical'
+'icebreaker' → 'qa'
+'icebreaker' → 'done'
+
+新值直接覆盖旧值</div>
+    </div>
+    <div class="reducer-card appd">
+      <h3>➕ 追加 append</h3>
+      <div class="fields">messages · answerHistory</div>
+      <div class="example">messages
+[msg1, msg2] + [msg3]
+= [msg1, msg2, msg3]
+
+新条目追加到数组末尾
+永不删除已有内容</div>
+    </div>
+    <div class="reducer-card merg">
+      <h3>🔀 合并 merge</h3>
+      <div class="fields">scores</div>
+      <div class="example">scores
+{tech:0, behav:0, overall:0}
+       + {tech:7}
+= {tech:7, behav:0, overall:0}
+
+后续再 + {behav:8}
+= {tech:7, behav:8, overall:0}
+
+新 key 覆盖旧 key
+未提供的 key 保留原值</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. Interrupts ============ -->
+<section>
+  <h2><span class="num">5</span> 四个中断点 &amp; 恢复方式</h2>
+  <div class="interrupt-list">
+    <div class="interrupt-item">
+      <div class="interrupt-dot"></div>
+      <div class="interrupt-info">
+        <div class="interrupt-node">🧊 icebreaker</div>
+        <div class="interrupt-desc">等待候选人自我介绍</div>
+      </div>
+      <div class="interrupt-resume">POST /message</div>
+    </div>
+    <div class="interrupt-item">
+      <div class="interrupt-dot"></div>
+      <div class="interrupt-info">
+        <div class="interrupt-node">📊 tech_evaluate</div>
+        <div class="interrupt-desc">等待候选人技术问题回答</div>
+      </div>
+      <div class="interrupt-resume">POST /message</div>
+    </div>
+    <div class="interrupt-item">
+      <div class="interrupt-dot"></div>
+      <div class="interrupt-info">
+        <div class="interrupt-node">📊 behavioral_evaluate</div>
+        <div class="interrupt-desc">等待候选人行为问题回答</div>
+      </div>
+      <div class="interrupt-resume">POST /message</div>
+    </div>
+    <div class="interrupt-item">
+      <div class="interrupt-dot"></div>
+      <div class="interrupt-info">
+        <div class="interrupt-node">💬 candidate_qa</div>
+        <div class="interrupt-desc">等待候选人提出问题<br><small>循环最多 5 次后进入报告</small></div>
+      </div>
+      <div class="interrupt-resume">POST /message</div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'default',
+  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+  securityLevel: 'loose',
+});
+</script>
+</body>
+</html>

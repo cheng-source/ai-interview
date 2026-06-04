@@ -3,6 +3,11 @@ import { ref } from "vue";
 import type { ChatMessage } from "../types";
 import { useInterviewTimer } from "./timer";
 
+const stageLabelMap: Record<string, string> = {
+  icebreaker: '自我介绍', technical: '技术面', behavioral: '行为面', qa: '反问', done: '完成',
+};
+function stageLabel(s: string): string { return stageLabelMap[s] || s; }
+
 export const useInterviewStore = defineStore("interview", () => {
   const messages = ref<ChatMessage[]>([]);
   const currentStage = ref("");
@@ -84,6 +89,9 @@ export const useInterviewStore = defineStore("interview", () => {
               }
               streamingMsgId = null;
             }
+            // AI 输出完毕，等待用户回答
+            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+            stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
             break;
           }
 
@@ -111,15 +119,17 @@ export const useInterviewStore = defineStore("interview", () => {
             // 记录到时间线
             if (data.stage) {
               stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-              stageLog.value.push({ label: `${data.stage}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+              stageLog.value.push({ label: `${stageLabel(data.stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
             }
+            // AI 输出完毕，等待用户回答
+            stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
             break;
 
           case "stage":
             currentStage.value = data.stage;
             // 记录阶段切换
             stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-            stageLog.value.push({ label: `进入${data.stage}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+            stageLog.value.push({ label: `进入${stageLabel(data.stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
             break;
 
           case "done": {

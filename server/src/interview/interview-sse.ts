@@ -5,7 +5,7 @@ import type { PrismaService } from "../prisma/prisma.service";
 import type Redis from "ioredis";
 
 const TEXT_NODES = new Set(["tech_follow_up", "behavioral_follow_up", "candidate_qa", "tech_select", "behavioral_select"]);
-const FORMAT_NODES = new Set(["tech_ask", "behavioral_ask", "generate_report"]);
+const FORMAT_NODES = new Set(["generate_report"]);
 const STATE_TTL = 86400;
 
 /** 依赖注入——SSE 流式方法需要的共享资源 */

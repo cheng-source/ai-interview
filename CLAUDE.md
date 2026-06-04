@@ -72,13 +72,13 @@ server/                          后端（NestJS）
 ## 面试流程图
 
 ```
-START → icebreaker（破冰） → parse_resume（解析简历） → tech_select（选题） → tech_ask（提问） → tech_evaluate（评估） ⏸️
+START → icebreaker（破冰） → parse_resume（解析简历） → tech_select（选题+出题） → tech_evaluate（评估） ⏸️
                     ↓
   tech_evaluate → tech_follow_up（追问） → tech_evaluate        （回答浅显 且 追问深度<3）
   tech_evaluate → tech_next_topic（下一主题） → tech_select      （还有剩余主题）
   tech_evaluate → behavioral_select（进入行为面）                （技术面结束）
                     ↓
-  behavioral_select → behavioral_ask → behavioral_evaluate ⏸️
+  behavioral_select → behavioral_evaluate ⏸️
                     ↓
   behavioral_evaluate → behavioral_follow_up → behavioral_evaluate   （回答模糊 且 追问深度<2）
   behavioral_evaluate → behavioral_next_question → behavioral_select （还有剩余能力项）
@@ -86,6 +86,8 @@ START → icebreaker（破冰） → parse_resume（解析简历） → tech_sel
                     ↓
   candidate_qa → candidate_qa（循环，qaCount<5） → generate_report（生成报告） → END
 ```
+
+⏸️ = 中断点。当 `candidateAnswer` 为空时图暂停；候选人发送消息后通过 `updateState` + `stream(null)` 恢复执行。
 
 ⏸️ = 中断点。当 `candidateAnswer` 为空时图暂停；候选人发送消息后通过 `updateState` + `stream(null)` 恢复执行。
 

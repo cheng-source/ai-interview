@@ -58,7 +58,7 @@
           <ChatBubble v-for="msg in store.messages" :key="msg.id" :message="msg" />
           <div v-if="store.statusText" class="flex items-center gap-2 max-w-[80%] px-4 py-2.5 rounded-xl mb-3 self-start bg-gray-100 border border-gray-200 text-gray-500 text-[13px]">
             <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            {{ store.statusText }}
+            AI正在思考中...
           </div>
           <div v-if="store.currentStage === 'done'" class="text-center py-5 text-green-500 text-base mt-6">
             ✓ 面试完成
@@ -68,10 +68,12 @@
         <div v-if="store.currentStage !== 'done'" class="flex gap-2 p-3 bg-white border-t border-gray-200">
           <div class="flex-1 flex flex-col">
             <textarea
+              ref="inputRef"
               v-model="userInput"
               @keydown.enter.exact.prevent="handleSend"
-              placeholder="描述你的思路... (Enter 发送)"
-              class="flex-1 p-2.5 rounded-lg border border-gray-300 bg-white text-gray-800 outline-none resize-none text-sm leading-relaxed min-h-11 focus:border-blue-400"
+              @input="autoResize"
+              placeholder="描述你的思路... (Enter 发送，Shift+Enter 换行)"
+              class="flex-1 p-2.5 rounded-lg border border-gray-300 bg-white text-gray-800 outline-none resize-none text-sm leading-relaxed min-h-11 max-h-[30vh] focus:border-blue-400 overflow-y-auto"
               :disabled="sending"
             />
             <div v-if="store.questionTimeRemaining > 0"
@@ -92,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useInterviewStore } from '../../stores/interview';
 import { interviewsApi } from '../../api/client';
@@ -104,6 +106,13 @@ const route = useRoute();
 const store = useInterviewStore();
 const interviewId = route.params.interviewId as string;
 const userInput = ref('');
+const inputRef = ref<HTMLTextAreaElement | null>(null);
+function autoResize() {
+  const el = inputRef.value;
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 const manualResumeText = ref('');
 const sending = ref(false);
 const loading = ref(false);
@@ -135,7 +144,7 @@ async function handleStart() {
 async function handleSend() {
   const text = userInput.value.trim();
   if (!text || sending.value) return;
-  sending.value = true; userInput.value = '';
+  sending.value = true; userInput.value = ''; autoResize();
   await store.sendAnswer(text);
   sending.value = false; await nextTick(); scrollToBottom();
 }
@@ -150,10 +159,21 @@ function formatElapsed(seconds: number): string {
 async function handleTimeout() {
   if (sending.value || !store.interviewId) return;
   const text = userInput.value.trim();
-  userInput.value = ''; sending.value = true;
+  userInput.value = ''; autoResize(); sending.value = true;
   try { await store.sendAnswer(text || ''); } catch {}
   sending.value = false; await nextTick(); scrollToBottom();
 }
+
+// 自动滚屏：监听最后一条消息的内容长度变化（覆盖新增消息 + 流式追加两种场景）
+watch(
+  () => {
+    const msgs = store.messages;
+    if (msgs.length === 0) return '';
+    const last = msgs[msgs.length - 1];
+    return `${msgs.length}:${last.id}:${last.content.length}`;
+  },
+  () => { nextTick(() => scrollToBottom()); },
+);
 
 onMounted(async () => { store.onTimeout(handleTimeout); await tryResume(); });
 

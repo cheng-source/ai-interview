@@ -55,10 +55,6 @@ export async function behavioralSelectNode(state: any): Promise<any> {
   };
 }
 
-export async function behavioralAskNode(_state: any): Promise<any> {
-  return {};
-}
-
 export async function behavioralEvaluateNode(state: any): Promise<any> {
   const question = state.behavioralRound.currentQuestion;
   const candidateAnswer = state.candidateAnswer || '';

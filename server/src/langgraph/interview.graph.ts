@@ -5,14 +5,12 @@ import { parseResumeNode } from "./nodes/parse-resume.node";
 import { icebreakerNode } from "./nodes/icebreaker.node";
 import {
   techSelectNode,
-  techAskNode,
   techEvaluateNode,
   techFollowUpNode,
   techNextTopicNode,
 } from "./nodes/technical-round.node";
 import {
   behavioralSelectNode,
-  behavioralAskNode,
   behavioralEvaluateNode,
   behavioralFollowUpNode,
   behavioralNextQuestionNode,
@@ -38,12 +36,10 @@ export function createInterviewGraph() {
     .addNode("parse_resume", parseResumeNode)
     .addNode("icebreaker", icebreakerNode)
     .addNode("tech_select", techSelectNode)
-    .addNode("tech_ask", techAskNode)
     .addNode("tech_evaluate", techEvaluateNode)
     .addNode("tech_follow_up", techFollowUpNode)
     .addNode("tech_next_topic", techNextTopicNode)
     .addNode("behavioral_select", behavioralSelectNode)
-    .addNode("behavioral_ask", behavioralAskNode)
     .addNode("behavioral_evaluate", behavioralEvaluateNode)
     .addNode("behavioral_follow_up", behavioralFollowUpNode)
     .addNode("behavioral_next_question", behavioralNextQuestionNode)
@@ -55,8 +51,7 @@ export function createInterviewGraph() {
       tech_select: "tech_select",
       behavioral_select: "behavioral_select",
     })
-    .addEdge("tech_select", "tech_ask")
-    .addEdge("tech_ask", "tech_evaluate")
+    .addEdge("tech_select", "tech_evaluate")
     .addConditionalEdges("tech_evaluate", routeInTechnical, {
       tech_follow_up: "tech_follow_up",
       tech_next_topic: "tech_next_topic",
@@ -65,8 +60,7 @@ export function createInterviewGraph() {
     .addEdge("tech_follow_up", "tech_evaluate")
     .addEdge("tech_next_topic", "tech_select")
 
-    .addEdge("behavioral_select", "behavioral_ask")
-    .addEdge("behavioral_ask", "behavioral_evaluate")
+    .addEdge("behavioral_select", "behavioral_evaluate")
     .addConditionalEdges("behavioral_evaluate", routeInBehavioral, {
       behavioral_follow_up: "behavioral_follow_up",
       behavioral_next_question: "behavioral_next_question",

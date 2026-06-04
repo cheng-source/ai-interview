@@ -13,10 +13,6 @@ export function routeInTechnical(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
 
-  if (!lastRecord || lastRecord.stage !== "technical") {
-    return "tech_ask";
-  }
-
   const evaluation = lastRecord.evaluation || {};
   const depth = state.techRound?.depth || 0;
   const projects = state.candidate?.projects || [];
@@ -45,10 +41,6 @@ export function routeAfterTechNextTopic(state: any): string {
 export function routeInBehavioral(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
-
-  if (!lastRecord || lastRecord.stage !== "behavioral") {
-    return "behavioral_ask";
-  }
 
   const evaluation = lastRecord.evaluation || {};
   const depth = state.behavioralRound?.depth || 0;
