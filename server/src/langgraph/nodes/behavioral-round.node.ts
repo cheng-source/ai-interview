@@ -1,5 +1,6 @@
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
 import { interrupt } from '@langchain/langgraph';
+import { pushEvent } from '../llm';
 import { executePersona } from '../personas/persona-executor';
 import { behavioralInterviewerPersona } from '../personas/behavioral-interviewer.persona';
 import { behavioralEvaluatorPersona } from '../personas/behavioral-evaluator.persona';
@@ -19,6 +20,7 @@ export async function behavioralSelectNode(state: any): Promise<any> {
   const askedCount = (behavioralRound.questionsAsked || []).length;
 
   if (competencies.length === 0 || askedCount >= competencies.length + 1) {
+    pushEvent({ type: "stage", stage: "qa" });
     return { currentStage: 'qa' };
   }
 
@@ -46,7 +48,6 @@ export async function behavioralSelectNode(state: any): Promise<any> {
   const timeLimit = timeMatch ? parseInt(timeMatch[1]) : 240;
 
   return {
-    messages: [new AIMessage(actualContent)],
     behavioralRound: {
       ...behavioralRound,
       currentQuestion: { text: actualContent, topic: currentCompetency, type: 'behavioral', difficulty: 3, timeLimit },
@@ -60,6 +61,7 @@ export async function behavioralEvaluateNode(state: any): Promise<any> {
   const candidateAnswer = state.candidateAnswer || '';
 
   if (!question) {
+    pushEvent({ type: "stage", stage: "qa" });
     return { candidateAnswer: '', currentStage: 'qa' };
   }
 
@@ -75,6 +77,8 @@ export async function behavioralEvaluateNode(state: any): Promise<any> {
   const scores = { ...state.scores };
   scores.behavioral = (scores.behavioral || 0) + evaluation.score;
 
+  pushEvent({ type: "evaluation", data: evaluation, stage: "behavioral" });
+
   return {
     answerHistory: [{
       stage: 'behavioral',
@@ -88,6 +92,7 @@ export async function behavioralEvaluateNode(state: any): Promise<any> {
 }
 
 export async function behavioralFollowUpNode(state: any): Promise<any> {
+  const question = state.behavioralRound.currentQuestion;
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
 
@@ -95,10 +100,23 @@ export async function behavioralFollowUpNode(state: any): Promise<any> {
     `题目: ${lastRecord?.question?.text}\n回答: ${lastRecord?.answer}\n评价: 回答空洞，缺乏具体案例`,
   ));
 
+  const followUpText = content || '能举一个更具体的例子吗？';
+  // 从 LLM 输出中解析难度星级和 [time]，与 select 节点一致
+  const starMatch = followUpText.match(/\*\*.+?\*\*\s*\(.+?\s*\|\s*难度:\s*(★+)/);
+  const difficulty = starMatch ? starMatch[1].length : question?.difficulty || 3;
+  const timeToSec: Record<number, number> = { 1: 120, 2: 180, 3: 240, 4: 300, 5: 420 };
+  const timeMatch = followUpText.match(/\[time\]\s*(\d+)/);
+  const timeLimit = timeMatch ? parseInt(timeMatch[1]) : timeToSec[difficulty] || 240;
+
   return {
-    messages: [new AIMessage(content || '能举一个更具体的例子吗？')],
     behavioralRound: {
       ...state.behavioralRound,
+      currentQuestion: {
+        ...question,
+        text: followUpText,
+        difficulty,
+        timeLimit,
+      },
       depth: (state.behavioralRound.depth || 0) + 1,
     },
   };

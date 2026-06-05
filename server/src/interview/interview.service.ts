@@ -55,9 +55,11 @@ export class InterviewService {
 
     const config = { configurable: { thread_id: interview.threadId } };
     let state = await this.graph.getState(config);
+    console.log('[getState] MemorySaver:', state?.values ? `answerHistory=${(state.values as any).answerHistory?.length}` : 'null');
 
     if (!state?.values) {
       const saved = await loadStateFromRedis(this.deps, interview.threadId);
+      console.log('[getState] Redis:', saved ? `answerHistory=${saved.answerHistory?.length}` : 'null');
       if (saved) { await this.graph.updateState(config, saved as any); state = await this.graph.getState(config); }
     }
 
@@ -67,6 +69,7 @@ export class InterviewService {
         const json = typeof (interview as any).stateJson === 'string'
           ? JSON.parse((interview as any).stateJson)
           : (interview as any).stateJson;
+        console.log('[getState] DB stateJson:', json?.answerHistory?.length);
         await this.graph.updateState(config, json as any);
         state = await this.graph.getState(config);
       } catch {}

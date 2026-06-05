@@ -71,7 +71,7 @@ export function routeAfterCandidateQA(state: any): string {
   if ((state.qaCount || 0) >= 5) {
     return "generate_report";
   }
-  return "__end__";
+  return "candidate_qa";
 }
 
 export function routeAfterReport(state: any): string {

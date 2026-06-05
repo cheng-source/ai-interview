@@ -99,5 +99,9 @@ export async function executePersona(
   const response = await llm.invoke(messages);
   const content = typeof response.content === 'string' ? response.content : '';
 
+  if (persona.streaming && !options?.silent) {
+    pushEvent({ type: 'token_end' });
+  }
+
   return { response, content };
 }

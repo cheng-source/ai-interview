@@ -1,5 +1,4 @@
 import {
-  AIMessage,
   HumanMessage,
   SystemMessage,
 } from "@langchain/core/messages";
@@ -106,7 +105,7 @@ export async function candidateQaNode(state: any): Promise<any> {
     pushEvent({ type: "message", content: prompt, stage: "candidate_qa" });
     pushEvent({ type: "stage", stage: "candidate_qa" });
     interrupt({ type: "waiting_for_question" });
-    return { messages: [new AIMessage(prompt)], currentStage: "candidate_qa" };
+    return { currentStage: "candidate_qa" };
   }
 
   setCallType("text");
@@ -135,7 +134,14 @@ export async function candidateQaNode(state: any): Promise<any> {
   const content = typeof response.content === "string" ? response.content : "";
 
   return {
-    messages: [new AIMessage(content)],
+    answerHistory: [
+      {
+        stage: "candidate_qa",
+        question: { text: candidateQuestion, topic: "反问" },
+        answer: content,
+        evaluation: null,
+      },
+    ],
     qaCount: qaCount + 1,
     candidateAnswer: "",
   };

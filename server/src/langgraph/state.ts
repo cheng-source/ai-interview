@@ -1,5 +1,4 @@
 import { Annotation } from '@langchain/langgraph';
-import { BaseMessage } from '@langchain/core/messages';
 import type { InterviewState } from '../common/types';
 
 export const InterviewStateAnnotation = Annotation.Root({
@@ -39,9 +38,9 @@ export const InterviewStateAnnotation = Annotation.Root({
     reducer: (prev, next) => ({ ...prev, ...next }),
     default: () => ({ technical: 0, behavioral: 0, overall: 0 }),
   }),
-  messages: Annotation<BaseMessage[]>({
-    reducer: (prev, next) => [...prev, ...next],
-    default: () => [],
+  reportText: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
   }),
   qaCount: Annotation<number>({
     reducer: (_, next) => next,

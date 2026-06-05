@@ -1,5 +1,6 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import { interrupt } from "@langchain/langgraph";
+import { pushEvent } from "../llm";
 import { executePersona } from "../personas/persona-executor";
 import {
   techInterviewerPersona,
@@ -37,12 +38,6 @@ export async function techSelectNode(state: any): Promise<any> {
   const askedCount = (techRound.questionsAsked || []).length;
 
   const maxProjectQuestions = projects.length;
-  const maxTotalQuestions = maxProjectQuestions + 2;
-  console.log("🚀 ~ techSelectNode ~ state:", state);
-
-  if (askedCount >= maxTotalQuestions) {
-    return { currentStage: "behavioral" };
-  }
 
   // Phase 1: 项目经历深挖
   if (askedCount < maxProjectQuestions) {
@@ -67,7 +62,6 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
     );
 
     return {
-      messages: [new AIMessage(content)],
       techRound: {
         ...techRound,
         currentQuestion: {
@@ -88,6 +82,12 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   const skillCats = skills.map((s: any) => s.category).filter(Boolean);
   const conceptTopic = skillCats[conceptIndex] || "技术基础";
 
+  // 汇总已覆盖的话题，避免重复出题
+  const answerHistory = state.answerHistory || [];
+  const coveredTopics = [
+    ...new Set(answerHistory.map((r: any) => r.question?.topic).filter(Boolean)),
+  ];
+
   const { content } = await executePersona(
     techConceptInterviewerPersona,
     new HumanMessage(
@@ -95,6 +95,7 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
 【岗位JD】${position.jdText}
 【候选人技能分类】${conceptTopic}
 【技能详情】${skills.flatMap((s: any) => s.items || [s]).join(", ")}
+${coveredTopics.length ? `【已覆盖话题】${coveredTopics.join("、")}，请避开这些话题` : ""}
 ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
     ),
   );
@@ -105,7 +106,6 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   );
 
   return {
-    messages: [new AIMessage(content)],
     techRound: {
       ...techRound,
       currentQuestion: {
@@ -126,6 +126,7 @@ export async function techEvaluateNode(state: any): Promise<any> {
   const candidateAnswer = state.candidateAnswer || "";
 
   if (!question) {
+    pushEvent({ type: "stage", stage: "behavioral" });
     return { candidateAnswer: "", currentStage: "behavioral" };
   }
 
@@ -146,6 +147,8 @@ export async function techEvaluateNode(state: any): Promise<any> {
 
   const scores = { ...state.scores };
   scores.technical = (scores.technical || 0) + evaluation.score;
+
+  pushEvent({ type: "evaluation", data: evaluation, stage: "technical" });
 
   return {
     answerHistory: [
@@ -182,10 +185,22 @@ export async function techFollowUpNode(state: any): Promise<any> {
     ),
   );
 
+  const followUpText = content || "请再详细说说...";
+  // 从 LLM 输出中解析难度星级和 [time]，格式与 tech_select 一致
+  const starMatch = followUpText.match(/\*\*.+?\*\*\s*\(.+?\s*\|\s*难度:\s*(★+)/);
+  const difficulty = starMatch ? starMatch[1].length : question.difficulty;
+  const timeMatch = followUpText.match(/\[time\]\s*(\d+)/);
+  const timeLimit = timeMatch ? parseInt(timeMatch[1]) : difficultyToSeconds(difficulty);
+
   return {
-    messages: [new AIMessage(content || "请再详细说说...")],
     techRound: {
       ...state.techRound,
+      currentQuestion: {
+        ...question,
+        text: followUpText,
+        difficulty,
+        timeLimit,
+      },
       depth: (state.techRound.depth || 0) + 1,
     },
   };

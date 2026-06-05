@@ -1,5 +1,3 @@
-import { BaseMessage } from '@langchain/core/messages';
-
 export interface Question {
   text: string;
   type: 'technical' | 'behavioral';
@@ -61,7 +59,7 @@ export interface InterviewState {
     evaluation: Evaluation;                                        // LLM 对本次回答的评分
   }>;
   scores: { technical: number; behavioral: number; overall: number }; // 实时累计得分
-  messages: BaseMessage[];                                         // LangChain 消息历史（LLM 对话上下文）
+  reportText: string;                                              // 最终评估报告文本
   qaCount: number;                                                 // 反问环节已提问数，上限5个
   candidateAnswer: string;                                         // 当前轮次候选人的输入
   resumeText?: string;                                             // 简历原文，仅在创建面试时传入

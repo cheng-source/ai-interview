@@ -20,15 +20,9 @@ import { generateReportNode } from "./nodes/generate-report.node";
 
 import {
   routeAfterParse,
-  routeAfterIcebreaker,
   routeInTechnical,
-  routeAfterTechFollowUp,
-  routeAfterTechNextTopic,
   routeInBehavioral,
-  routeAfterBehavioralFollowUp,
-  routeAfterBehavioralNextQuestion,
   routeAfterCandidateQA,
-  routeAfterReport,
 } from "./routing";
 
 export function createInterviewGraph() {
@@ -71,7 +65,7 @@ export function createInterviewGraph() {
 
     .addConditionalEdges("candidate_qa", routeAfterCandidateQA, {
       generate_report: "generate_report",
-      __end__: END,
+      candidate_qa: "candidate_qa",
     })
 
     .addEdge("generate_report", END);

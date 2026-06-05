@@ -1,4 +1,5 @@
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
+import { pushEvent } from '../llm';
 import { executePersona } from '../personas/persona-executor';
 import { reportGeneratorPersona } from '../personas/report-generator.persona';
 
@@ -36,8 +37,12 @@ ${(report.weaknesses || []).map((w: string) => `- ${w}`).join('\n')}
 
 **录用建议:** ${report.recommendation}`;
 
+  pushEvent({ type: 'message', content: summaryMessage, stage: 'done' });
+  pushEvent({ type: 'stage', stage: 'done' });
+  pushEvent({ type: 'done', report });
+
   return {
-    messages: [new AIMessage(summaryMessage)],
+    reportText: summaryMessage,
     currentStage: 'done',
     scores: {
       technical: report.techScore,
