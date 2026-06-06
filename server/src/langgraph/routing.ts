@@ -1,12 +1,12 @@
 import { END } from "@langchain/langgraph";
 
 export function routeAfterParse(state: any): string {
-  if (state.interviewType === "behavioral") return "behavioral_select";
-  return "tech_select";
+  if (state.interviewType === "behavioral") return "ask_behavioral_question";
+  return "ask_technical_question";
 }
 
 export function routeAfterIcebreaker(state: any): string {
-  return "parse_resume";
+  return "analyze_resume";
 }
 
 export function routeInTechnical(state: any): string {
@@ -20,22 +20,22 @@ export function routeInTechnical(state: any): string {
   const maxQuestions = projects.length + 2; // 所有项目 + 最多2道八股文
 
   if (evaluation.isSurfaceLevel && depth < 3) {
-    return "tech_follow_up";
+    return "ask_technical_follow_up";
   }
 
   if (questionsAsked.length < maxQuestions) {
-    return "tech_next_topic";
+    return "advance_technical_topic";
   }
 
-  return "candidate_qa";
+  return "answer_candidate_questions";
 }
 
 export function routeAfterTechFollowUp(state: any): string {
-  return "tech_evaluate";
+  return "evaluate_technical_answer";
 }
 
 export function routeAfterTechNextTopic(state: any): string {
-  return "tech_select";
+  return "ask_technical_question";
 }
 
 export function routeInBehavioral(state: any): string {
@@ -49,29 +49,29 @@ export function routeInBehavioral(state: any): string {
   const questionsAsked = behavioralRound.questionsAsked || [];
 
   if (evaluation.isVague && depth < 2) {
-    return "behavioral_follow_up";
+    return "ask_behavioral_follow_up";
   }
 
   if (questionsAsked.length < competencies.length) {
-    return "behavioral_next_question";
+    return "advance_behavioral_competency";
   }
 
-  return "candidate_qa";
+  return "answer_candidate_questions";
 }
 
 export function routeAfterBehavioralFollowUp(state: any): string {
-  return "behavioral_evaluate";
+  return "evaluate_behavioral_answer";
 }
 
 export function routeAfterBehavioralNextQuestion(state: any): string {
-  return "behavioral_select";
+  return "ask_behavioral_question";
 }
 
 export function routeAfterCandidateQA(state: any): string {
   if ((state.qaCount || 0) >= 5) {
-    return "generate_report";
+    return "generate_final_report";
   }
-  return "candidate_qa";
+  return "answer_candidate_questions";
 }
 
 export function routeAfterReport(state: any): string {

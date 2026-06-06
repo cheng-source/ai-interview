@@ -10,6 +10,9 @@ import {
   streamStart,
   streamAnswer,
   streamInterview,
+  normalizeStateValues,
+  asyncIterableToObservable,
+  getActiveInterviewStream,
 } from "./interview-sse";
 
 @Injectable()
@@ -75,12 +78,15 @@ export class InterviewService {
       } catch {}
     }
 
+    const values = state?.values ? normalizeStateValues(state.values, (state as any).next) : null;
+
     return {
-      state: state?.values || null,
+      state: values,
       status: interview.status,
       startedAt: interview.startedAt,
+      hasActiveStream: !!getActiveInterviewStream(interviewId),
       interviewType: interview.interviewType || 'technical',
-      resumeText: interview.candidate.resumeText || (state?.values as any)?.resumeText || null,
+      resumeText: interview.candidate.resumeText || (values as any)?.resumeText || null,
       candidate: {
         name: interview.candidate.name,
         email: interview.candidate.email || '',
@@ -122,11 +128,23 @@ export class InterviewService {
     return streamStart(this.deps, interviewId, resumeText);
   }
 
+  startStream$(interviewId: string, resumeText?: string) {
+    return asyncIterableToObservable(this.startStream(interviewId, resumeText));
+  }
+
   answerStream(interviewId: string, userMessage: string) {
     return streamAnswer(this.deps, interviewId, userMessage);
   }
 
+  answerStream$(interviewId: string, userMessage: string) {
+    return asyncIterableToObservable(this.answerStream(interviewId, userMessage));
+  }
+
   interviewStream(interviewId: string, userMessage?: string) {
     return streamInterview(this.deps, interviewId, userMessage);
+  }
+
+  interviewStream$(interviewId: string, userMessage?: string) {
+    return asyncIterableToObservable(this.interviewStream(interviewId, userMessage));
   }
 }

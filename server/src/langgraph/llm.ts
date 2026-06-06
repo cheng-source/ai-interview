@@ -1,71 +1,120 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Observable, ReplaySubject } from "rxjs";
 
-// ---- async queue for streaming tokens & events ----
-class TokenQueue {
-  private items: any[] = [];
-  private waiter: ((v: IteratorResult<any>) => void) | null = null;
-  private closed = false;
+type CallType = "text" | "structured" | "none";
+
+// ---- request-scoped stream context for streaming tokens & events ----
+export class InterviewStreamContext implements AsyncIterable<any> {
+  private subject = new ReplaySubject<any>(10000);
+  private callType: CallType = "none";
+
+  get events$(): Observable<any> {
+    return this.subject.asObservable();
+  }
+
+  setCallType(type: CallType) {
+    this.callType = type;
+  }
+
+  getCallType(): CallType {
+    return this.callType;
+  }
 
   push(item: any) {
-    if (this.waiter) {
-      this.waiter({ value: item, done: false });
-      this.waiter = null;
-    } else {
-      this.items.push(item);
-    }
+    if (!this.subject.closed) this.subject.next(item);
   }
 
   done() {
-    this.closed = true;
-    if (this.waiter) {
-      this.waiter({ value: undefined, done: true });
-      this.waiter = null;
-    }
+    if (!this.subject.closed) this.subject.complete();
   }
 
   [Symbol.asyncIterator](): AsyncIterator<any> {
-    const self = this;
+    const subject = this.subject;
+    const items: any[] = [];
+    let waiter: ((v: IteratorResult<any>) => void) | null = null;
+    let completed = false;
+    let error: unknown = null;
+
+    const subscription = subject.subscribe({
+      next(item) {
+        if (waiter) {
+          waiter({ value: item, done: false });
+          waiter = null;
+        } else {
+          items.push(item);
+        }
+      },
+      error(err) {
+        error = err;
+        if (waiter) {
+          const pending = waiter;
+          waiter = null;
+          Promise.reject(err).catch(() => pending({ value: undefined, done: true }));
+        }
+      },
+      complete() {
+        completed = true;
+        if (waiter) {
+          waiter({ value: undefined, done: true });
+          waiter = null;
+        }
+      },
+    });
+
     return {
       next(): Promise<IteratorResult<any>> {
-        if (self.items.length > 0) {
-          return Promise.resolve({ value: self.items.shift()!, done: false });
+        if (items.length > 0) {
+          return Promise.resolve({ value: items.shift()!, done: false });
         }
-        if (self.closed) {
+        if (error) {
+          return Promise.reject(error);
+        }
+        if (completed) {
+          subscription.unsubscribe();
           return Promise.resolve({ value: undefined, done: true });
         }
-        return new Promise((r) => {
-          self.waiter = r;
+        return new Promise((resolve) => {
+          waiter = resolve;
         });
+      },
+      return(): Promise<IteratorResult<any>> {
+        subscription.unsubscribe();
+        return Promise.resolve({ value: undefined, done: true });
       },
     };
   }
 }
 
-// ---- per-request streaming context ----
-let currentQueue: TokenQueue | null = null;
-let currentCallType: "text" | "structured" | "none" = "none";
+const streamContextStorage = new AsyncLocalStorage<InterviewStreamContext>();
 
-export function createStreamingContext(): TokenQueue {
-  const queue = new TokenQueue();
-  currentQueue = queue;
-  return queue;
+export function runWithStreamingContext<T>(
+  context: InterviewStreamContext,
+  fn: () => T,
+): T {
+  return streamContextStorage.run(context, fn);
+}
+
+function getStreamingContext(): InterviewStreamContext | undefined {
+  return streamContextStorage.getStore();
+}
+
+export function createStreamingContext(): InterviewStreamContext {
+  return new InterviewStreamContext();
 }
 
 export function clearStreamingContext() {
-  currentQueue = null;
-  currentCallType = "none";
+  getStreamingContext()?.setCallType("none");
 }
 
 export function setCallType(type: "text" | "structured") {
-  currentCallType = type;
+  getStreamingContext()?.setCallType(type);
 }
 
 export function pushEvent(event: any) {
-  if (currentQueue) {
-    currentQueue.push(event);
-  }
+  getStreamingContext()?.push(event);
 }
 
 // ---- LangChain callback handler ----
@@ -73,8 +122,9 @@ class StreamingHandler extends BaseCallbackHandler {
   name = "streaming_handler";
 
   handleLLMNewToken(token: string) {
-    if (currentQueue && token && currentCallType === "text") {
-      currentQueue.push({ type: "token", content: token });
+    const context = getStreamingContext();
+    if (context && token && context.getCallType() === "text") {
+      context.push({ type: "token", content: token });
     }
   }
 }

@@ -1,7 +1,7 @@
 import { interrupt } from '@langchain/langgraph';
 import { pushEvent } from '../llm';
 
-export async function icebreakerNode(state: any): Promise<any> {
+export async function collectSelfIntroductionNode(state: any): Promise<any> {
   const candidateAnswer = state.candidateAnswer || '';
 
   if (!candidateAnswer.trim()) {

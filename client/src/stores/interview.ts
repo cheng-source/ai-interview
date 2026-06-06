@@ -32,6 +32,14 @@ export const useInterviewStore = defineStore("interview", () => {
     });
   };
 
+  const hasSameLastMessage = (role: string, content: string, stage?: string) => {
+    const last = messages.value[messages.value.length - 1];
+    return !!last
+      && last.role === role
+      && last.content.trim() === content.trim()
+      && (last.stage || "") === (stage || "");
+  };
+
   async function readSSE(response: Response) {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
@@ -97,7 +105,6 @@ export const useInterviewStore = defineStore("interview", () => {
 
           case "evaluation": {
             const ev = data.data || {};
-            addMessage("system", `评分: ${ev.score}/10 — ${ev.summary || ""}`, data.stage);
             evaluations.value.push({
               questionText: ev.questionText || ev.question || '',
               score: ev.score || 0,
@@ -112,7 +119,9 @@ export const useInterviewStore = defineStore("interview", () => {
           }
 
           case "message":
-            addMessage("interviewer", data.content, data.stage);
+            if (!hasSameLastMessage("interviewer", data.content, data.stage)) {
+              addMessage("interviewer", data.content, data.stage);
+            }
             currentStage.value = data.stage || currentStage.value;
             timer.tryStartTimer(data.content);
             statusText.value = "";
@@ -212,6 +221,27 @@ export const useInterviewStore = defineStore("interview", () => {
     }
   };
 
+  const resumeStream = async (id: string) => {
+    interviewId.value = id;
+    abortController = new AbortController();
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/stream`,
+        { signal: abortController.signal },
+      );
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await readSSE(response);
+    } catch (e: any) {
+      if (e.name !== "AbortError") {
+        console.error("Resume stream error:", e);
+      }
+    } finally {
+      abortController = null;
+    }
+  };
+
   const cleanup = () => {
     abortController?.abort();
     abortController = null;
@@ -244,6 +274,7 @@ export const useInterviewStore = defineStore("interview", () => {
     stopAllTimers: timer.stopAllTimers,
     startInterview,
     sendAnswer,
+    resumeStream,
     addMessage,
     cleanup,
   };

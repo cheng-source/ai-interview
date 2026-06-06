@@ -41,7 +41,7 @@ export async function doParseResume(
   };
 }
 
-export async function parseResumeNode(state: any): Promise<any> {
+export async function analyzeResumeNode(state: any): Promise<any> {
   if (
     state.candidate?.skills?.length > 0 ||
     state.candidate?.projects?.length > 0

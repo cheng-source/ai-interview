@@ -14,7 +14,7 @@ const COMPETENCY_QUESTIONS: Record<string, string> = {
   adaptability: '适应能力和学习能力',
 };
 
-export async function behavioralSelectNode(state: any): Promise<any> {
+export async function askBehavioralQuestionNode(state: any): Promise<any> {
   const { behavioralRound, position } = state;
   const competencies = behavioralRound.competencies || [];
   const askedCount = (behavioralRound.questionsAsked || []).length;
@@ -48,6 +48,7 @@ export async function behavioralSelectNode(state: any): Promise<any> {
   const timeLimit = timeMatch ? parseInt(timeMatch[1]) : 240;
 
   return {
+    currentStage: 'behavioral',
     behavioralRound: {
       ...behavioralRound,
       currentQuestion: { text: actualContent, topic: currentCompetency, type: 'behavioral', difficulty: 3, timeLimit },
@@ -56,7 +57,7 @@ export async function behavioralSelectNode(state: any): Promise<any> {
   };
 }
 
-export async function behavioralEvaluateNode(state: any): Promise<any> {
+export async function evaluateBehavioralAnswerNode(state: any): Promise<any> {
   const question = state.behavioralRound.currentQuestion;
   const candidateAnswer = state.candidateAnswer || '';
 
@@ -91,7 +92,7 @@ export async function behavioralEvaluateNode(state: any): Promise<any> {
   };
 }
 
-export async function behavioralFollowUpNode(state: any): Promise<any> {
+export async function askBehavioralFollowUpNode(state: any): Promise<any> {
   const question = state.behavioralRound.currentQuestion;
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
@@ -109,6 +110,7 @@ export async function behavioralFollowUpNode(state: any): Promise<any> {
   const timeLimit = timeMatch ? parseInt(timeMatch[1]) : timeToSec[difficulty] || 240;
 
   return {
+    currentStage: 'behavioral',
     behavioralRound: {
       ...state.behavioralRound,
       currentQuestion: {
@@ -122,7 +124,7 @@ export async function behavioralFollowUpNode(state: any): Promise<any> {
   };
 }
 
-export async function behavioralNextQuestionNode(state: any): Promise<any> {
+export async function advanceBehavioralCompetencyNode(state: any): Promise<any> {
   const prevQuestion = state.behavioralRound.currentQuestion;
   const questionsAsked = prevQuestion
     ? [...(state.behavioralRound.questionsAsked || []), prevQuestion]

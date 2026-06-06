@@ -92,7 +92,7 @@ async function vectorSearchKnowledge(
   }
 }
 
-export async function candidateQaNode(state: any): Promise<any> {
+export async function answerCandidateQuestionsNode(state: any): Promise<any> {
   const candidateQuestion = state.candidateAnswer || "";
   const qaCount = state.qaCount || 0;
 

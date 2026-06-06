@@ -31,7 +31,7 @@ function parseQuestionMeta(text: string, fallbackTopic: string) {
   return { topic, difficulty, timeLimit };
 }
 
-export async function techSelectNode(state: any): Promise<any> {
+export async function askTechnicalQuestionNode(state: any): Promise<any> {
   const { techRound, position, candidate } = state;
   const projects = candidate.projects || [];
   const skills = candidate.skills || [];
@@ -62,6 +62,7 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
     );
 
     return {
+      currentStage: "technical",
       techRound: {
         ...techRound,
         currentQuestion: {
@@ -106,6 +107,7 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   );
 
   return {
+    currentStage: "technical",
     techRound: {
       ...techRound,
       currentQuestion: {
@@ -121,7 +123,7 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   };
 }
 
-export async function techEvaluateNode(state: any): Promise<any> {
+export async function evaluateTechnicalAnswerNode(state: any): Promise<any> {
   const question = state.techRound.currentQuestion;
   const candidateAnswer = state.candidateAnswer || "";
 
@@ -164,7 +166,7 @@ export async function techEvaluateNode(state: any): Promise<any> {
   };
 }
 
-export async function techFollowUpNode(state: any): Promise<any> {
+export async function askTechnicalFollowUpNode(state: any): Promise<any> {
   const question = state.techRound.currentQuestion;
   if (!question) return { currentStage: "behavioral" };
   const answerHistory = state.answerHistory || [];
@@ -186,13 +188,14 @@ export async function techFollowUpNode(state: any): Promise<any> {
   );
 
   const followUpText = content || "请再详细说说...";
-  // 从 LLM 输出中解析难度星级和 [time]，格式与 tech_select 一致
+  // 从 LLM 输出中解析难度星级和 [time]，格式与技术出题节点一致
   const starMatch = followUpText.match(/\*\*.+?\*\*\s*\(.+?\s*\|\s*难度:\s*(★+)/);
   const difficulty = starMatch ? starMatch[1].length : question.difficulty;
   const timeMatch = followUpText.match(/\[time\]\s*(\d+)/);
   const timeLimit = timeMatch ? parseInt(timeMatch[1]) : difficultyToSeconds(difficulty);
 
   return {
+    currentStage: "technical",
     techRound: {
       ...state.techRound,
       currentQuestion: {
@@ -206,7 +209,7 @@ export async function techFollowUpNode(state: any): Promise<any> {
   };
 }
 
-export async function techNextTopicNode(state: any): Promise<any> {
+export async function advanceTechnicalTopicNode(state: any): Promise<any> {
   const prevQuestion = state.techRound.currentQuestion;
   const questionsAsked = prevQuestion
     ? [...(state.techRound.questionsAsked || []), prevQuestion]

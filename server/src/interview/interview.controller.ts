@@ -1,12 +1,42 @@
 import { Controller, Get, Post, Param, Body, Sse, MessageEvent, Res, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InterviewService } from './interview.service';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import type { Response } from 'express';
 
 @Controller('api/interviews')
 export class InterviewController {
   constructor(private readonly interviewService: InterviewService) {}
+
+  private writeSseHeaders(res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+  }
+
+  private writeSseEvent(res: Response, event: any) {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  }
+
+  private writeSseStream(res: Response, stream$: Observable<any>) {
+    this.writeSseHeaders(res);
+
+    const subscription = stream$.subscribe({
+      next: (event) => this.writeSseEvent(res, event),
+      error: (error: any) => {
+        this.writeSseEvent(res, { type: 'error', message: error?.message || String(error) });
+        if (!res.writableEnded) res.end();
+      },
+      complete: () => {
+        if (!res.writableEnded) res.end();
+      },
+    });
+
+    res.on('close', () => subscription.unsubscribe());
+  }
 
   @Get()
   async list() {
@@ -25,49 +55,20 @@ export class InterviewController {
 
   @Post(':id/start')
   async start(@Param('id') id: string, @Body() body: { resumeText: string }, @Res() res: Response) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    try {
-      for await (const event of this.interviewService.startStream(id, body.resumeText)) {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      }
-    } catch (e: any) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: e.message || String(e) })}\n\n`);
-    }
-    res.end();
+    this.writeSseStream(res, this.interviewService.startStream$(id, body.resumeText));
   }
 
   @Get(':id/stream')
   @Sse()
   stream(@Param('id') id: string): Observable<MessageEvent> {
-    return new Observable((subscriber) => {
-      (async () => {
-        for await (const event of this.interviewService.interviewStream(id)) {
-          subscriber.next({ data: event } as MessageEvent);
-        }
-        subscriber.complete();
-      })();
-    });
+    return this.interviewService.interviewStream$(id).pipe(
+      map((event) => ({ data: event }) as MessageEvent),
+    );
   }
 
   @Post(':id/message')
   async sendMessage(@Param('id') id: string, @Body() body: { message: string }, @Res() res: Response) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    try {
-      for await (const event of this.interviewService.interviewStream(id, body.message)) {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      }
-    } catch (e: any) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: e.message || String(e) })}\n\n`);
-    }
-    res.end();
+    this.writeSseStream(res, this.interviewService.interviewStream$(id, body.message));
   }
 
   @Post('upload-resume')

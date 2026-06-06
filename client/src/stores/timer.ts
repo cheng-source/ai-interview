@@ -35,8 +35,9 @@ export function useInterviewTimer() {
     questionTimeRemaining.value = 0;
   }
 
-  function startTotalTimer() {
-    totalElapsed.value = 0;
+  function startTotalTimer(initialSeconds = 0) {
+    stopTotalTimer();
+    totalElapsed.value = Math.max(0, initialSeconds);
     totalTimer = setInterval(() => { totalElapsed.value++; }, 1000);
   }
 

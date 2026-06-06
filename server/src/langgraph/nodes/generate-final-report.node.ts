@@ -3,7 +3,7 @@ import { pushEvent } from '../llm';
 import { executePersona } from '../personas/persona-executor';
 import { reportGeneratorPersona } from '../personas/report-generator.persona';
 
-export async function generateReportNode(state: any): Promise<any> {
+export async function generateFinalReportNode(state: any): Promise<any> {
   const { candidate, position, answerHistory } = state;
 
   const historySummary = (answerHistory || []).map((h: any) => ({

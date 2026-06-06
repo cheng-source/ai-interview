@@ -163,6 +163,7 @@ import { interviewsApi } from "../../api/client";
 import ChatBubble from "../../components/ChatBubble.vue";
 import ProgressIndicator from "../../components/ProgressIndicator.vue";
 import InterviewSidebar from "../../components/InterviewSidebar.vue";
+import { buildRestoredInterview } from "./restore";
 
 const stageLabelMap: Record<string, string> = {
   icebreaker: '自我介绍', technical: '技术面', behavioral: '行为面', qa: '反问', done: '完成',
@@ -289,11 +290,6 @@ function restoreFromAnswerHistory(state: any) {
       });
     }
     if (record.evaluation) {
-      store.messages.push({
-        id: mkMsgId(), role: "system",
-        content: `评分: ${record.evaluation.score}/10 — ${record.evaluation.summary || ""}`,
-        stage: record.stage || "", timestamp: Date.now(), streaming: false,
-      });
       store.evaluations.push({
         questionText: record.question?.text || "",
         score: record.evaluation.score,
@@ -352,7 +348,7 @@ function buildStageLog(state: any) {
 async function tryResume() {
   try {
     const res = await interviewsApi.getState(interviewId);
-    const { state, status, startedAt, resumeText, candidate, position, interviewType } = res.data;
+    const { state, status, startedAt, resumeText, candidate, position, interviewType, hasActiveStream } = res.data;
     console.log('[tryResume] state:', state ? `answerHistory=${state.answerHistory?.length}, stage=${state.currentStage}` : 'null', 'status:', status, 'resumeText:', !!resumeText);
 
     if (candidate) candidateName.value = candidate.name || "";
@@ -362,29 +358,27 @@ async function tryResume() {
     }
     storedResumeText.value = resumeText || "";
     if (interviewType) store.interviewType = interviewType;
+    debugger
+    const restored = buildRestoredInterview({ state, interviewId, startedAt, hasActiveStream });
 
-    const hasHistory = state?.answerHistory?.length > 0;
-
-    // 1. 有回答记录 → 恢复聊天
-    if (hasHistory) {
-      store.messages = [];
-      store.evaluations = [];
-      restoreFromAnswerHistory(state);
-      restoreReport(state);
-      store.stageLog = buildStageLog(state);
-      store.interviewId = interviewId;
-      store.currentStage = state.currentStage || "";
-      if (startedAt)
-        store.totalElapsed = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
-      store.startTotalTimer();
+    // 1. 有可恢复图状态 → 恢复聊天（包含当前待回答问题）
+    if (restored.started) {
+      store.messages = restored.messages;
+      store.evaluations = restored.evaluations;
+      store.stageLog = restored.stageLog;
+      store.report = restored.report;
+      store.interviewId = restored.interviewId;
+      store.currentStage = restored.currentStage;
+      store.totalElapsed = restored.totalElapsed;
+      store.startTotalTimer(restored.totalElapsed);
       started.value = true;
       pageLoading.value = false;
       await nextTick();
       scrollToBottom();
 
-      for (let i = store.messages.length - 1; i >= 0; i--) {
-        const m = store.messages[i].content.match(/\[time\]\s*(\d+)/);
-        if (m) { store.startQuestionTimer(parseInt(m[1])); break; }
+      if (restored.questionSeconds > 0) store.startQuestionTimer(restored.questionSeconds);
+      if (hasActiveStream) {
+        store.resumeStream(interviewId).catch(() => {});
       }
       return;
     }

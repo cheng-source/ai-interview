@@ -1,15 +1,62 @@
-import { createStreamingContext, clearStreamingContext, getOrStartResumeParse } from "../langgraph/llm";
-import { doParseResume } from "../langgraph/nodes/parse-resume.node";
+import {
+  InterviewStreamContext,
+  createStreamingContext,
+  clearStreamingContext,
+  getOrStartResumeParse,
+  runWithStreamingContext,
+} from "../langgraph/llm";
+import { doParseResume } from "../langgraph/nodes/analyze-resume.node";
 import type { PrismaService } from "../prisma/prisma.service";
 import type Redis from "ioredis";
+import { Observable } from "rxjs";
 
 const STATE_TTL = 86400;
+const activeInterviewStreams = new Map<string, InterviewStreamContext>();
 
 /** 依赖注入——SSE 流式方法需要的共享资源 */
 export interface SseDeps {
   graph: any;
   prisma: PrismaService;
   redis: Redis;
+}
+
+export function registerActiveInterviewStream(interviewId: string, stream: InterviewStreamContext) {
+  activeInterviewStreams.set(interviewId, stream);
+}
+
+export function getActiveInterviewStream(interviewId: string): InterviewStreamContext | null {
+  return activeInterviewStreams.get(interviewId) || null;
+}
+
+export function clearActiveInterviewStream(interviewId: string, stream: InterviewStreamContext) {
+  if (activeInterviewStreams.get(interviewId) === stream) {
+    activeInterviewStreams.delete(interviewId);
+  }
+}
+
+export function asyncIterableToObservable<T>(iterable: AsyncIterable<T>): Observable<T> {
+  return new Observable<T>((subscriber) => {
+    const iterator = iterable[Symbol.asyncIterator]();
+    let cancelled = false;
+
+    (async () => {
+      try {
+        while (!cancelled) {
+          const { value, done } = await iterator.next();
+          if (done) break;
+          subscriber.next(value);
+        }
+        if (!cancelled) subscriber.complete();
+      } catch (error) {
+        if (!cancelled) subscriber.error(error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      iterator.return?.();
+    };
+  });
 }
 
 /** Redis 状态备份 */
@@ -30,7 +77,50 @@ export async function loadStateFromRedis(deps: SseDeps, threadId: string) {
   } catch (e) { console.error("Redis loadState failed:", (e as Error).message); return null; }
 }
 
-/** 后台异步解析简历（共享 Promise，仅预热 LLM 调用，结果由 parseResumeNode 写入 graph state） */
+export function normalizeStateValues(values: any, next?: unknown): any {
+  if (!values) return values;
+
+  const normalized = { ...values };
+  const nextNodes = Array.isArray(next) ? next.map(String) : [];
+
+  if (normalized.currentStage === "done") return normalized;
+
+  if (nextNodes.includes("answer_candidate_questions") || nextNodes.includes("candidate_qa")) {
+    normalized.currentStage = "candidate_qa";
+    return normalized;
+  }
+
+  if (
+    nextNodes.includes("evaluate_behavioral_answer") ||
+    nextNodes.includes("behavioral_evaluate") ||
+    normalized.currentStage === "behavioral"
+  ) {
+    if (normalized.behavioralRound?.currentQuestion?.text) normalized.currentStage = "behavioral";
+    return normalized;
+  }
+
+  if (
+    nextNodes.includes("evaluate_technical_answer") ||
+    nextNodes.includes("tech_evaluate") ||
+    normalized.currentStage === "technical"
+  ) {
+    if (normalized.techRound?.currentQuestion?.text) normalized.currentStage = "technical";
+    return normalized;
+  }
+
+  if (normalized.behavioralRound?.currentQuestion?.text) {
+    normalized.currentStage = "behavioral";
+    return normalized;
+  }
+
+  if (normalized.techRound?.currentQuestion?.text) {
+    normalized.currentStage = "technical";
+  }
+
+  return normalized;
+}
+
+/** 后台异步解析简历（共享 Promise，仅预热 LLM 调用，结果由 analyzeResumeNode 写入 graph state） */
 async function parseResumeAsync(deps: SseDeps, threadId: string, resumeText: string, jdText: string) {
   getOrStartResumeParse(threadId, () => doParseResume(resumeText, jdText, undefined, { silent: true })).catch(() => {});
 }
@@ -71,10 +161,11 @@ export async function* streamStart(deps: SseDeps, interviewId: string, resumeTex
   const config = { configurable: { thread_id: interview.threadId } };
   console.log('[streamStart] initializing with answerHistory:', initialState.answerHistory?.length);
   const queue = createStreamingContext();
+  registerActiveInterviewStream(interviewId, queue);
 
   parseResumeAsync(deps, interview.threadId, finalResumeText, interview.position.jdText);
 
-  const graphTask = (async () => {
+  const graphTask = runWithStreamingContext(queue, async () => {
     try {
       await deps.graph.invoke(initialState, config);
     } catch (e: any) {
@@ -97,9 +188,10 @@ export async function* streamStart(deps: SseDeps, interviewId: string, resumeTex
       } catch {}
       await saveStateToRedis(deps, interview.threadId);
       clearStreamingContext();
+      clearActiveInterviewStream(interviewId, queue);
       queue.done();
     }
-  })();
+  });
 
   for await (const item of queue) yield item;
 }
@@ -116,8 +208,9 @@ export async function* streamAnswer(deps: SseDeps, interviewId: string, userMess
 
   const config = { configurable: { thread_id: interview.threadId } };
   const queue = createStreamingContext();
+  registerActiveInterviewStream(interviewId, queue);
 
-  const graphTask = (async () => {
+  const graphTask = runWithStreamingContext(queue, async () => {
     try {
       await deps.graph.updateState(config, { candidateAnswer: userMessage });
       await deps.graph.invoke(null, config);
@@ -141,9 +234,10 @@ export async function* streamAnswer(deps: SseDeps, interviewId: string, userMess
       } catch {}
       await saveStateToRedis(deps, interview.threadId);
       clearStreamingContext();
+      clearActiveInterviewStream(interviewId, queue);
       queue.done();
     }
-  })();
+  });
 
   for await (const item of queue) yield item;
 }
@@ -153,6 +247,12 @@ export async function* streamInterview(deps: SseDeps, interviewId: string, userM
   if (userMessage) {
     yield* streamAnswer(deps, interviewId, userMessage);
   } else {
+    const activeStream = getActiveInterviewStream(interviewId);
+    if (activeStream) {
+      for await (const item of activeStream) yield item;
+      return;
+    }
+
     // 恢复路径：仅返回当前阶段，前端通过 GET /state 做完整恢复
     const interview = await deps.prisma.interview.findUnique({
       where: { id: interviewId },
@@ -169,7 +269,8 @@ export async function* streamInterview(deps: SseDeps, interviewId: string, userM
     }
 
     if (state?.values) {
-      yield { type: "stage", stage: (state.values as any).currentStage || "" };
+      const values = normalizeStateValues(state.values, (state as any).next);
+      yield { type: "stage", stage: values.currentStage || "" };
     }
   }
 }

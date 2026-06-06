@@ -1,22 +1,22 @@
 import { StateGraph, END, START } from "@langchain/langgraph";
 import { InterviewStateAnnotation } from "./state";
 
-import { parseResumeNode } from "./nodes/parse-resume.node";
-import { icebreakerNode } from "./nodes/icebreaker.node";
+import { analyzeResumeNode } from "./nodes/analyze-resume.node";
+import { collectSelfIntroductionNode } from "./nodes/collect-self-introduction.node";
 import {
-  techSelectNode,
-  techEvaluateNode,
-  techFollowUpNode,
-  techNextTopicNode,
-} from "./nodes/technical-round.node";
+  askTechnicalQuestionNode,
+  evaluateTechnicalAnswerNode,
+  askTechnicalFollowUpNode,
+  advanceTechnicalTopicNode,
+} from "./nodes/technical-interview.node";
 import {
-  behavioralSelectNode,
-  behavioralEvaluateNode,
-  behavioralFollowUpNode,
-  behavioralNextQuestionNode,
-} from "./nodes/behavioral-round.node";
-import { candidateQaNode } from "./nodes/candidate-qa.node";
-import { generateReportNode } from "./nodes/generate-report.node";
+  askBehavioralQuestionNode,
+  evaluateBehavioralAnswerNode,
+  askBehavioralFollowUpNode,
+  advanceBehavioralCompetencyNode,
+} from "./nodes/behavioral-interview.node";
+import { answerCandidateQuestionsNode } from "./nodes/answer-candidate-questions.node";
+import { generateFinalReportNode } from "./nodes/generate-final-report.node";
 
 import {
   routeAfterParse,
@@ -27,48 +27,48 @@ import {
 
 export function createInterviewGraph() {
   const graph = new StateGraph(InterviewStateAnnotation)
-    .addNode("parse_resume", parseResumeNode)
-    .addNode("icebreaker", icebreakerNode)
-    .addNode("tech_select", techSelectNode)
-    .addNode("tech_evaluate", techEvaluateNode)
-    .addNode("tech_follow_up", techFollowUpNode)
-    .addNode("tech_next_topic", techNextTopicNode)
-    .addNode("behavioral_select", behavioralSelectNode)
-    .addNode("behavioral_evaluate", behavioralEvaluateNode)
-    .addNode("behavioral_follow_up", behavioralFollowUpNode)
-    .addNode("behavioral_next_question", behavioralNextQuestionNode)
-    .addNode("candidate_qa", candidateQaNode)
-    .addNode("generate_report", generateReportNode)
-    .addEdge(START, "icebreaker")
-    .addEdge("icebreaker", "parse_resume")
-    .addConditionalEdges("parse_resume", routeAfterParse, {
-      tech_select: "tech_select",
-      behavioral_select: "behavioral_select",
+    .addNode("collect_self_introduction", collectSelfIntroductionNode)
+    .addNode("analyze_resume", analyzeResumeNode)
+    .addNode("ask_technical_question", askTechnicalQuestionNode)
+    .addNode("evaluate_technical_answer", evaluateTechnicalAnswerNode)
+    .addNode("ask_technical_follow_up", askTechnicalFollowUpNode)
+    .addNode("advance_technical_topic", advanceTechnicalTopicNode)
+    .addNode("ask_behavioral_question", askBehavioralQuestionNode)
+    .addNode("evaluate_behavioral_answer", evaluateBehavioralAnswerNode)
+    .addNode("ask_behavioral_follow_up", askBehavioralFollowUpNode)
+    .addNode("advance_behavioral_competency", advanceBehavioralCompetencyNode)
+    .addNode("answer_candidate_questions", answerCandidateQuestionsNode)
+    .addNode("generate_final_report", generateFinalReportNode)
+    .addEdge(START, "collect_self_introduction")
+    .addEdge("collect_self_introduction", "analyze_resume")
+    .addConditionalEdges("analyze_resume", routeAfterParse, {
+      ask_technical_question: "ask_technical_question",
+      ask_behavioral_question: "ask_behavioral_question",
     })
-    .addEdge("tech_select", "tech_evaluate")
-    .addConditionalEdges("tech_evaluate", routeInTechnical, {
-      tech_follow_up: "tech_follow_up",
-      tech_next_topic: "tech_next_topic",
-      candidate_qa: "candidate_qa",
+    .addEdge("ask_technical_question", "evaluate_technical_answer")
+    .addConditionalEdges("evaluate_technical_answer", routeInTechnical, {
+      ask_technical_follow_up: "ask_technical_follow_up",
+      advance_technical_topic: "advance_technical_topic",
+      answer_candidate_questions: "answer_candidate_questions",
     })
-    .addEdge("tech_follow_up", "tech_evaluate")
-    .addEdge("tech_next_topic", "tech_select")
+    .addEdge("ask_technical_follow_up", "evaluate_technical_answer")
+    .addEdge("advance_technical_topic", "ask_technical_question")
 
-    .addEdge("behavioral_select", "behavioral_evaluate")
-    .addConditionalEdges("behavioral_evaluate", routeInBehavioral, {
-      behavioral_follow_up: "behavioral_follow_up",
-      behavioral_next_question: "behavioral_next_question",
-      candidate_qa: "candidate_qa",
+    .addEdge("ask_behavioral_question", "evaluate_behavioral_answer")
+    .addConditionalEdges("evaluate_behavioral_answer", routeInBehavioral, {
+      ask_behavioral_follow_up: "ask_behavioral_follow_up",
+      advance_behavioral_competency: "advance_behavioral_competency",
+      answer_candidate_questions: "answer_candidate_questions",
     })
-    .addEdge("behavioral_follow_up", "behavioral_evaluate")
-    .addEdge("behavioral_next_question", "behavioral_select")
+    .addEdge("ask_behavioral_follow_up", "evaluate_behavioral_answer")
+    .addEdge("advance_behavioral_competency", "ask_behavioral_question")
 
-    .addConditionalEdges("candidate_qa", routeAfterCandidateQA, {
-      generate_report: "generate_report",
-      candidate_qa: "candidate_qa",
+    .addConditionalEdges("answer_candidate_questions", routeAfterCandidateQA, {
+      generate_final_report: "generate_final_report",
+      answer_candidate_questions: "answer_candidate_questions",
     })
 
-    .addEdge("generate_report", END);
+    .addEdge("generate_final_report", END);
 
   return graph;
 }
