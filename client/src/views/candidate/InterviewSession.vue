@@ -165,11 +165,6 @@ import ProgressIndicator from "../../components/ProgressIndicator.vue";
 import InterviewSidebar from "../../components/InterviewSidebar.vue";
 import { buildRestoredInterview } from "./restore";
 
-const stageLabelMap: Record<string, string> = {
-  icebreaker: '自我介绍', technical: '技术面', behavioral: '行为面', qa: '反问', done: '完成',
-};
-function stageLabel(s: string): string { return stageLabelMap[s] || s; }
-
 const route = useRoute();
 const store = useInterviewStore();
 const interviewId = route.params.interviewId as string;
@@ -197,10 +192,6 @@ const hasResume = computed(() => !!storedResumeText.value);
 const canStart = computed(
   () => hasResume.value || manualResumeText.value.trim().length > 0,
 );
-
-function mkMsgId(): string {
-  return Date.now().toString() + Math.random();
-}
 
 async function handleStart() {
   if (!canStart.value || loading.value) return;
@@ -268,83 +259,6 @@ onMounted(async () => {
   await tryResume();
 });
 
-/** 从 answerHistory 重建全部聊天消息（Q&A + 评估） */
-function restoreFromAnswerHistory(state: any) {
-  for (const record of state.answerHistory) {
-    const isCandidateQA = record.stage === "candidate_qa";
-
-    if (record.question?.text) {
-      store.messages.push({
-        id: mkMsgId(),
-        role: isCandidateQA ? "candidate" : "interviewer",
-        content: record.question.text,
-        stage: record.stage || "", timestamp: Date.now(), streaming: false,
-      });
-    }
-    if (record.answer) {
-      store.messages.push({
-        id: mkMsgId(),
-        role: isCandidateQA ? "interviewer" : "candidate",
-        content: record.answer,
-        stage: record.stage || "", timestamp: Date.now(), streaming: false,
-      });
-    }
-    if (record.evaluation) {
-      store.evaluations.push({
-        questionText: record.question?.text || "",
-        score: record.evaluation.score,
-        summary: record.evaluation.summary || "",
-        stage: record.stage || "",
-      });
-    }
-  }
-}
-
-/** 恢复报告（state.reportText 由 generate_report 节点写入） */
-function restoreReport(state: any) {
-  if (state.finalReport) {
-    store.report = state.finalReport;
-  }
-
-  if (state.currentStage === "done" && state.reportText) {
-    store.messages.push({
-      id: mkMsgId(), role: "interviewer",
-      content: state.reportText, stage: "done", timestamp: Date.now(), streaming: false,
-    });
-  }
-}
-
-/** 重建侧边栏执行流程时间线 */
-function buildStageLog(state: any) {
-  const log: Array<{ label: string; time: string; type: "completed" | "active" }> = [];
-
-  log.push({ label: "破冰", time: "", type: "completed" });
-
-  if (state.candidate?.skills?.length > 0 || state.candidate?.projects?.length > 0) {
-    log.push({ label: "简历解析", time: "", type: "completed" });
-  }
-
-  if (state.answerHistory?.length) {
-    for (let i = 0; i < state.answerHistory.length; i++) {
-      const r = state.answerHistory[i];
-      const shortText = r.question?.text
-        ? r.question.text.length > 18 ? r.question.text.slice(0, 18) + "..." : r.question.text
-        : "";
-      log.push({ label: `Q${i + 1}${shortText ? ": " + shortText : ""}`, time: "", type: "completed" });
-      if (r.evaluation)
-        log.push({ label: `Q${i + 1} 评估 (${r.evaluation.score}/10)`, time: "", type: "completed" });
-    }
-  }
-
-  if (state.currentStage && state.currentStage !== "done") {
-    log.push({ label: `${stageLabelMap[state.currentStage] || state.currentStage} · 进行中`, time: "", type: "active" });
-  } else if (state.currentStage === "done") {
-    log.push({ label: "面试完成", time: "", type: "completed" });
-  }
-
-  return log;
-}
-
 async function tryResume() {
   try {
     const res = await interviewsApi.getState(interviewId);
@@ -358,7 +272,6 @@ async function tryResume() {
     }
     storedResumeText.value = resumeText || "";
     if (interviewType) store.interviewType = interviewType;
-    debugger
     const restored = buildRestoredInterview({ state, interviewId, startedAt, hasActiveStream });
 
     // 1. 有可恢复图状态 → 恢复聊天（包含当前待回答问题）

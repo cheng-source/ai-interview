@@ -67,6 +67,14 @@ const now = new Date("2026-06-06T10:00:00Z").getTime();
     restored.messages.map((m) => m.role),
     ["interviewer", "candidate"],
   );
+  assert.equal(
+    restored.messages.some((m) => /score|评估|evaluation/i.test(m.content)),
+    false,
+  );
+  assert.equal(
+    restored.stageLog.some((entry) => /score|评估|evaluation/i.test(entry.label)),
+    false,
+  );
   assert.equal(restored.evaluations.length, 1);
   assert.equal(restored.evaluations[0].score, 8);
 }

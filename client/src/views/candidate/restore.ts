@@ -151,9 +151,6 @@ function buildStageLog(state: any): RestoredInterview["stageLog"] {
       const questionText = record.question?.text || "";
       const shortText = questionText.length > 18 ? `${questionText.slice(0, 18)}...` : questionText;
       if (questionText) log.push({ label: `Q${i + 1}${shortText ? `: ${shortText}` : ""}`, time: "", type: "completed" });
-      if (record.evaluation) {
-        log.push({ label: `Q${i + 1} evaluation (${record.evaluation.score}/10)`, time: "", type: "completed" });
-      }
     }
   }
 
