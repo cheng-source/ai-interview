@@ -68,7 +68,7 @@ export function routeAfterBehavioralNextQuestion(state: any): string {
 }
 
 export function routeAfterCandidateQA(state: any): string {
-  if ((state.qaCount || 0) >= 5) {
+  if (state.qaDone || (state.qaCount || 0) >= 5) {
     return "generate_final_report";
   }
   return "answer_candidate_questions";

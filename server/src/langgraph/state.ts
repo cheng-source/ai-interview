@@ -46,6 +46,10 @@ export const InterviewStateAnnotation = Annotation.Root({
     reducer: (_, next) => next,
     default: () => 0,
   }),
+  qaDone: Annotation<boolean>({
+    reducer: (_, next) => next,
+    default: () => false,
+  }),
   candidateAnswer: Annotation<string>({
     reducer: (_, next) => next,
     default: () => '',

@@ -22,6 +22,28 @@ function getPrisma(): PrismaClient {
   return cachedPrisma;
 }
 
+export function isCandidateQaDoneIntent(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/[，。！？、,.!?]/g, "");
+  if (!normalized) return false;
+
+  return [
+    "没有问题",
+    "没问题",
+    "没有了",
+    "没了",
+    "不用了",
+    "暂时没有",
+    "暂无问题",
+    "没有其他问题",
+    "没有别的问题",
+    "无问题",
+    "no question",
+    "no questions",
+    "no more questions",
+    "nothing else",
+  ].some((phrase) => normalized.includes(phrase));
+}
+
 async function rewriteQuery(question: string): Promise<string> {
   const rewriteLLM = createLLM({ temperature: 0, streaming: false });
   const res = await rewriteLLM.invoke([
@@ -96,6 +118,19 @@ export async function answerCandidateQuestionsNode(state: any): Promise<any> {
   const candidateQuestion = state.candidateAnswer || "";
   const qaCount = state.qaCount || 0;
 
+  if (isCandidateQaDoneIntent(candidateQuestion)) {
+    pushEvent({
+      type: "message",
+      content: "好的，感谢你的参与。接下来我会生成本次面试评估报告。",
+      stage: "candidate_qa",
+    });
+    return {
+      currentStage: "candidate_qa",
+      candidateAnswer: "",
+      qaDone: true,
+    };
+  }
+
   // 首次进入反问环节（刚从技术/行为面切换过来）：发送提示，等待候选人提问
   if (!candidateQuestion.trim()) {
     const prompt =
@@ -144,5 +179,6 @@ export async function answerCandidateQuestionsNode(state: any): Promise<any> {
     ],
     qaCount: qaCount + 1,
     candidateAnswer: "",
+    qaDone: false,
   };
 }
