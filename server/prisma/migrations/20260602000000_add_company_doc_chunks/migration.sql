@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- CreateTable
 CREATE TABLE "CompanyDocChunk" (
     "id" TEXT NOT NULL,

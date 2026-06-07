@@ -7,6 +7,7 @@
         <router-link to="/admin/positions" class="px-3 py-2 rounded-md text-gray-300 text-sm no-underline hover:bg-gray-700 hover:text-white transition-colors" active-class="bg-gray-700 !text-white">岗位管理</router-link>
         <router-link to="/admin/candidates" class="px-3 py-2 rounded-md text-gray-300 text-sm no-underline hover:bg-gray-700 hover:text-white transition-colors" active-class="bg-gray-700 !text-white">候选人管理</router-link>
         <router-link to="/admin/docs" class="px-3 py-2 rounded-md text-gray-300 text-sm no-underline hover:bg-gray-700 hover:text-white transition-colors" active-class="bg-gray-700 !text-white">公司文档</router-link>
+        <router-link to="/admin/llm-providers" class="px-3 py-2 rounded-md text-gray-300 text-sm no-underline hover:bg-gray-700 hover:text-white transition-colors" active-class="bg-gray-700 !text-white">模型配置</router-link>
       </nav>
     </aside>
     <main class="flex-1 p-6">

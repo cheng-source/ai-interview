@@ -6,6 +6,33 @@ import { Observable, ReplaySubject } from "rxjs";
 
 type CallType = "text" | "structured" | "none";
 
+export interface RuntimeProviderConfig {
+  id: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  embeddingModel?: string | null;
+  embeddingDimensions?: number | null;
+  supportsEmbedding?: boolean;
+  temperature?: number | null;
+  enabled?: boolean;
+}
+
+export interface RuntimeProviderSnapshot {
+  defaultChatProviderId: string;
+  defaultEmbeddingProviderId?: string | null;
+  providers: RuntimeProviderConfig[];
+}
+
+interface ResolvedChatProviderConfig {
+  model: string;
+  apiKey: string | undefined;
+  baseURL: string;
+  temperature?: number;
+}
+
+let runtimeProviderSnapshot: RuntimeProviderSnapshot | null = null;
+
 // ---- request-scoped stream context for streaming tokens & events ----
 export class InterviewStreamContext implements AsyncIterable<any> {
   private subject = new ReplaySubject<any>(10000);
@@ -117,6 +144,65 @@ export function pushEvent(event: any) {
   getStreamingContext()?.push(event);
 }
 
+export function setRuntimeProviderSnapshot(snapshot: RuntimeProviderSnapshot) {
+  runtimeProviderSnapshot = {
+    defaultChatProviderId: snapshot.defaultChatProviderId,
+    defaultEmbeddingProviderId: snapshot.defaultEmbeddingProviderId,
+    providers: snapshot.providers.map((provider) => ({ ...provider })),
+  };
+  cachedEmbeddings = null;
+}
+
+export function clearRuntimeProviderSnapshot() {
+  runtimeProviderSnapshot = null;
+  cachedEmbeddings = null;
+}
+
+export function clearRuntimeProviderSnapshotForTest() {
+  clearRuntimeProviderSnapshot();
+}
+
+function findRuntimeProvider(providerId?: string | null): RuntimeProviderConfig | null {
+  if (!runtimeProviderSnapshot) return null;
+
+  const id = providerId || runtimeProviderSnapshot.defaultChatProviderId;
+  const exact = runtimeProviderSnapshot.providers.find((provider) => provider.id === id);
+  if (exact) return exact;
+
+  return runtimeProviderSnapshot.providers.find(
+    (provider) => provider.id === runtimeProviderSnapshot?.defaultChatProviderId,
+  ) || null;
+}
+
+function normalizeOpenAIBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (!trimmed) return "https://api.openai.com/v1";
+  if (/\/v\d+$/i.test(trimmed)) return trimmed;
+  return `${trimmed}/v1`;
+}
+
+export function resolveChatProviderConfig(providerId?: string | null): ResolvedChatProviderConfig {
+  const provider = findRuntimeProvider(providerId);
+  if (provider) {
+    if (provider.enabled === false) {
+      throw new Error(`LLM provider ${provider.id} is disabled`);
+    }
+    return {
+      model: provider.model,
+      apiKey: provider.apiKey,
+      baseURL: normalizeOpenAIBaseUrl(provider.baseUrl),
+      temperature: provider.temperature ?? undefined,
+    };
+  }
+
+  return {
+    model: process.env.LLM_MODEL || "deepseek-v4-pro",
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: normalizeOpenAIBaseUrl(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"),
+    temperature: undefined,
+  };
+}
+
 // ---- LangChain callback handler ----
 class StreamingHandler extends BaseCallbackHandler {
   name = "streaming_handler";
@@ -131,14 +217,15 @@ class StreamingHandler extends BaseCallbackHandler {
 
 // ---- LLM factory ----
 export function createLLM(
-  options: { temperature?: number; streaming?: boolean } = {},
+  options: { temperature?: number; streaming?: boolean; providerId?: string } = {},
 ) {
+  const provider = resolveChatProviderConfig(options.providerId);
   const opts: any = {
-    model: process.env.LLM_MODEL || "deepseek-v4-pro",
-    temperature: options.temperature ?? 0.5,
-    apiKey: process.env.OPENAI_API_KEY,
+    model: provider.model,
+    temperature: options.temperature ?? provider.temperature ?? 0.5,
+    apiKey: provider.apiKey,
     configuration: {
-      baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+      baseURL: provider.baseURL,
     },
   };
   if (options.streaming) {
@@ -157,16 +244,21 @@ let cachedEmbeddings: OpenAIEmbeddings | null = null;
 
 export function createEmbeddings(): OpenAIEmbeddings {
   if (!cachedEmbeddings) {
+    const provider = runtimeProviderSnapshot?.providers.find(
+      (item) =>
+        item.id === runtimeProviderSnapshot?.defaultEmbeddingProviderId &&
+        item.supportsEmbedding &&
+        !!item.embeddingModel &&
+        item.enabled !== false,
+    );
     const opts: any = {
-      modelName: process.env.EMBEDDING_MODEL || "text-embedding-v3",
-      openAIApiKey: process.env.EMBEDDING_API_KEY,
+      modelName: provider?.embeddingModel || process.env.EMBEDDING_MODEL || "text-embedding-v3",
+      openAIApiKey: provider?.apiKey || process.env.EMBEDDING_API_KEY,
       configuration: {
-        baseURL:
-          process.env.EMBEDDING_BASE_URL ||
-          "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        baseURL: provider?.baseUrl || process.env.EMBEDDING_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
       },
     };
-    const dims = parseInt(process.env.EMBEDDING_DIMENSIONS || "", 10);
+    const dims = provider?.embeddingDimensions || parseInt(process.env.EMBEDDING_DIMENSIONS || "", 10);
     if (!isNaN(dims)) {
       opts.dimensions = dims;
     }

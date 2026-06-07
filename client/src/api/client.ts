@@ -74,6 +74,20 @@ export const knowledgeApi = {
   delete: (id: string) => api.delete(`/knowledge/${id}`),
 };
 
+export const llmProvidersApi = {
+  list: () => api.get('/llm-providers'),
+  create: (data: any) => api.post('/llm-providers', data),
+  update: (id: string, data: any) => api.put(`/llm-providers/${id}`, data),
+  delete: (id: string) => api.delete(`/llm-providers/${id}`),
+  test: (id: string) => api.post(`/llm-providers/${id}/test`),
+  getDefault: () => api.get('/llm-providers/default'),
+  updateDefault: (defaultProvider: string) =>
+    api.put('/llm-providers/default', { defaultProvider }),
+  updateDefaultEmbedding: (defaultEmbeddingProvider: string) =>
+    api.put('/llm-providers/default-embedding', { defaultEmbeddingProvider }),
+  reload: () => api.post('/llm-providers/reload'),
+};
+
 export const reportsApi = {
   list: () => api.get('/reports'),
   get: (interviewId: string) => api.get(`/reports/${interviewId}`),

@@ -13,6 +13,7 @@ import {
   normalizeStateValues,
   asyncIterableToObservable,
   getActiveInterviewStream,
+  hasRestorableStateValues,
 } from "./interview-sse";
 
 @Injectable()
@@ -60,14 +61,14 @@ export class InterviewService {
     let state = await this.graph.getState(config);
     console.log('[getState] MemorySaver:', state?.values ? `answerHistory=${(state.values as any).answerHistory?.length}` : 'null');
 
-    if (!state?.values) {
+    if (!hasRestorableStateValues(state?.values)) {
       const saved = await loadStateFromRedis(this.deps, interview.threadId);
       console.log('[getState] Redis:', saved ? `answerHistory=${saved.answerHistory?.length}` : 'null');
-      if (saved) { await this.graph.updateState(config, saved as any); state = await this.graph.getState(config); }
+      if (hasRestorableStateValues(saved)) { await this.graph.updateState(config, saved as any); state = await this.graph.getState(config); }
     }
 
     // MemorySaver + Redis 都丢了，最后兜底 DB 里的 stateJson
-    if (!state?.values && (interview as any).stateJson) {
+    if (!hasRestorableStateValues(state?.values) && (interview as any).stateJson) {
       try {
         const json = typeof (interview as any).stateJson === 'string'
           ? JSON.parse((interview as any).stateJson)
@@ -78,7 +79,7 @@ export class InterviewService {
       } catch {}
     }
 
-    const values = state?.values ? normalizeStateValues(state.values, (state as any).next) : null;
+    const values = hasRestorableStateValues(state?.values) ? normalizeStateValues(state.values, (state as any).next) : null;
 
     return {
       state: values,

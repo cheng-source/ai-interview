@@ -6,6 +6,7 @@ import { CandidateModule } from './candidate/candidate.module';
 import { InterviewModule } from './interview/interview.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { ReportModule } from './report/report.module';
+import { LlmProviderModule } from './llm-provider/llm-provider.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ReportModule } from './report/report.module';
     InterviewModule,
     KnowledgeModule,
     ReportModule,
+    LlmProviderModule,
   ],
 })
 export class AppModule {}

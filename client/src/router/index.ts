@@ -38,6 +38,11 @@ const router = createRouter({
       name: 'docs',
       component: () => import('../views/admin/CompanyDocs.vue'),
     },
+    {
+      path: '/admin/llm-providers',
+      name: 'llm-providers',
+      component: () => import('../views/admin/LlmProviders.vue'),
+    },
   ],
 });
 

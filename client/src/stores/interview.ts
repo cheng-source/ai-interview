@@ -32,6 +32,8 @@ export const useInterviewStore = defineStore("interview", () => {
     });
   };
 
+  const addSystemMessage = (content: string) => addMessage("system", content);
+
   const hasSameLastMessage = (role: string, content: string, stage?: string) => {
     const last = messages.value[messages.value.length - 1];
     return !!last
@@ -40,7 +42,7 @@ export const useInterviewStore = defineStore("interview", () => {
       && (last.stage || "") === (stage || "");
   };
 
-  async function readSSE(response: Response) {
+  async function readSSE(response: Response, onEvent?: (data: any) => void) {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -57,6 +59,7 @@ export const useInterviewStore = defineStore("interview", () => {
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
         const data = JSON.parse(line.slice(6));
+        onEvent?.(data);
 
         switch (data.type) {
           case "status":
@@ -164,10 +167,16 @@ export const useInterviewStore = defineStore("interview", () => {
     }
   }
 
-  const startInterview = async (id: string, resumeText: string) => {
+  const startInterview = async (id: string, resumeText: string, onReady?: () => void) => {
     interviewId.value = id;
     abortController = new AbortController();
     timer.startTotalTimer();
+    let ready = false;
+    const markReady = () => {
+      if (ready) return;
+      ready = true;
+      onReady?.();
+    };
 
     try {
       const response = await fetch(
@@ -181,22 +190,31 @@ export const useInterviewStore = defineStore("interview", () => {
       );
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readSSE(response);
+      await readSSE(response, (data) => {
+        if (["message", "token", "error", "done"].includes(data.type)) markReady();
+      });
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error("Start interview error:", e);
         addMessage("system", "启动面试失败，请重试");
       }
     } finally {
+      markReady();
       abortController = null;
       isConnected.value = true;
     }
   };
 
-  const sendAnswer = async (answer: string) => {
+  const sendAnswer = async (answer: string, onReady?: () => void) => {
     timer.stopQuestionTimer();
     addMessage("candidate", answer, currentStage.value);
     abortController = new AbortController();
+    let ready = false;
+    const markReady = () => {
+      if (ready) return;
+      ready = true;
+      onReady?.();
+    };
 
     try {
       const response = await fetch(
@@ -210,13 +228,16 @@ export const useInterviewStore = defineStore("interview", () => {
       );
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readSSE(response);
+      await readSSE(response, (data) => {
+        if (["message", "token", "error", "done"].includes(data.type)) markReady();
+      });
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error("Send answer error:", e);
         addMessage("system", "发送失败，请重试");
       }
     } finally {
+      markReady();
       abortController = null;
     }
   };
@@ -277,5 +298,6 @@ export const useInterviewStore = defineStore("interview", () => {
     resumeStream,
     addMessage,
     cleanup,
+    addSystemMessage,
   };
 });

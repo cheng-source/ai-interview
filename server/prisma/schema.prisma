@@ -72,3 +72,27 @@ model CompanyDocChunk {
   @@index([docId])
   @@index([category])
 }
+
+model LlmProvider {
+  id                  String   @id
+  baseUrl             String
+  apiKeyCiphertext    String
+  apiKeyNonce         String
+  model               String
+  embeddingModel      String?
+  embeddingDimensions Int?
+  supportsEmbedding   Boolean  @default(false)
+  temperature         Float?
+  enabled             Boolean  @default(true)
+  builtin             Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model LlmGlobalSetting {
+  id                         Int      @id @default(1)
+  defaultChatProviderId      String
+  defaultEmbeddingProviderId String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}

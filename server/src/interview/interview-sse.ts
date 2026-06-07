@@ -34,6 +34,19 @@ export function clearActiveInterviewStream(interviewId: string, stream: Intervie
   }
 }
 
+export function hasRestorableStateValues(values: any): boolean {
+  return !!values && (
+    Object.keys(values).length > 0 &&
+    (
+      Array.isArray(values.answerHistory) ||
+      !!values.currentStage ||
+      !!values.techRound?.currentQuestion ||
+      !!values.behavioralRound?.currentQuestion ||
+      !!values.reportText
+    )
+  );
+}
+
 export function asyncIterableToObservable<T>(iterable: AsyncIterable<T>): Observable<T> {
   return new Observable<T>((subscriber) => {
     const iterator = iterable[Symbol.asyncIterator]();
@@ -64,7 +77,7 @@ export async function saveStateToRedis(deps: SseDeps, threadId: string) {
   try {
     const config = { configurable: { thread_id: threadId } };
     const state = await deps.graph.getState(config);
-    if (state?.values) {
+    if (hasRestorableStateValues(state?.values)) {
       await deps.redis.set(`interview:state:${threadId}`, JSON.stringify(state.values), "EX", STATE_TTL);
     }
   } catch (e) { console.error("Redis saveState failed:", (e as Error).message); }
@@ -121,6 +134,29 @@ export function normalizeStateValues(values: any, next?: unknown): any {
 }
 
 /** 后台异步解析简历（共享 Promise，仅预热 LLM 调用，结果由 analyzeResumeNode 写入 graph state） */
+export function resolveAnswerUpdateAsNode(values: any, next?: unknown): string | undefined {
+  const nextNodes = Array.isArray(next) ? next.map(String) : [];
+
+  if (nextNodes.includes("answer_candidate_questions")) return "answer_candidate_questions";
+  if (nextNodes.includes("evaluate_technical_answer")) return "evaluate_technical_answer";
+  if (nextNodes.includes("evaluate_behavioral_answer")) return "evaluate_behavioral_answer";
+  if (nextNodes.includes("collect_self_introduction")) return "collect_self_introduction";
+
+  switch (values?.currentStage) {
+    case "candidate_qa":
+    case "qa":
+      return "answer_candidate_questions";
+    case "technical":
+      return "evaluate_technical_answer";
+    case "behavioral":
+      return "evaluate_behavioral_answer";
+    case "icebreaker":
+      return "collect_self_introduction";
+    default:
+      return undefined;
+  }
+}
+
 async function parseResumeAsync(deps: SseDeps, threadId: string, resumeText: string, jdText: string) {
   getOrStartResumeParse(threadId, () => doParseResume(resumeText, jdText, undefined, { silent: true })).catch(() => {});
 }
@@ -132,6 +168,9 @@ export async function* streamStart(deps: SseDeps, interviewId: string, resumeTex
     include: { candidate: true, position: true },
   });
   if (!interview) throw new Error("Interview not found");
+  if (interview.status !== "pending") {
+    throw new Error("Interview has already started. Use the resume stream instead.");
+  }
 
   const finalResumeText = resumeText || interview.candidate.resumeText || "";
   if (!finalResumeText) throw new Error("未找到简历内容");
@@ -162,6 +201,12 @@ export async function* streamStart(deps: SseDeps, interviewId: string, resumeTex
   console.log('[streamStart] initializing with answerHistory:', initialState.answerHistory?.length);
   const queue = createStreamingContext();
   registerActiveInterviewStream(interviewId, queue);
+  queue.push({
+    type: "message",
+    content: initialState.answerHistory[0].question.text,
+    stage: "icebreaker",
+  });
+  queue.push({ type: "stage", stage: "icebreaker" });
 
   parseResumeAsync(deps, interview.threadId, finalResumeText, interview.position.jdText);
 
@@ -212,7 +257,14 @@ export async function* streamAnswer(deps: SseDeps, interviewId: string, userMess
 
   const graphTask = runWithStreamingContext(queue, async () => {
     try {
-      await deps.graph.updateState(config, { candidateAnswer: userMessage });
+      const state = await deps.graph.getState(config);
+      const asNode = resolveAnswerUpdateAsNode(state?.values, (state as any)?.next);
+
+      if (asNode) {
+        await deps.graph.updateState(config, { candidateAnswer: userMessage }, asNode);
+      } else {
+        await deps.graph.updateState(config, { candidateAnswer: userMessage });
+      }
       await deps.graph.invoke(null, config);
       // invoke 正常返回 → 图到达 END（面试完成）
       await deps.prisma.interview.update({
@@ -263,12 +315,12 @@ export async function* streamInterview(deps: SseDeps, interviewId: string, userM
     const config = { configurable: { thread_id: interview.threadId } };
     let state = await deps.graph.getState(config);
 
-    if (!state?.values) {
+    if (!hasRestorableStateValues(state?.values)) {
       const saved = await loadStateFromRedis(deps, interview.threadId);
-      if (saved) { await deps.graph.updateState(config, saved as any); state = await deps.graph.getState(config); }
+      if (hasRestorableStateValues(saved)) { await deps.graph.updateState(config, saved as any); state = await deps.graph.getState(config); }
     }
 
-    if (state?.values) {
+    if (hasRestorableStateValues(state?.values)) {
       const values = normalizeStateValues(state.values, (state as any).next);
       yield { type: "stage", stage: values.currentStage || "" };
     }

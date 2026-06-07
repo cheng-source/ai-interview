@@ -5,7 +5,10 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors({ origin: "http://localhost:5173", credentials: true });
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN ?? /^https?:\/\/localhost:\d+$/,
+    credentials: true,
+  });
   // 注册全局管道 ValidationPipe  whitelist:自动删除 DTO 中不存在的字段。transform:自动类型转换
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableShutdownHooks();
