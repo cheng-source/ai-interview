@@ -174,6 +174,13 @@ function findRuntimeProvider(providerId?: string | null): RuntimeProviderConfig 
   ) || null;
 }
 
+export function getEnabledChatProviderIds(): string[] {
+  if (!runtimeProviderSnapshot) return [];
+  return runtimeProviderSnapshot.providers
+    .filter((provider) => provider.enabled !== false && !!provider.apiKey && !!provider.model)
+    .map((provider) => provider.id);
+}
+
 function normalizeOpenAIBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
   if (!trimmed) return "https://api.openai.com/v1";

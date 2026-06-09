@@ -43,7 +43,7 @@ export type ProjectExperience = z.infer<typeof ProjectExperienceSchema>;
 
 // ---- SSE 事件（前端和后端通讯格式） ----
 export const SSEEventType = z.enum([
-  "status", "token", "token_end", "message", "evaluation", "stage", "done", "error",
+  "status", "token", "token_end", "message", "evaluation", "stage", "done", "error", "llm_warning",
 ]);
 
 export const SSEEventSchema = z.discriminatedUnion("type", [
@@ -55,6 +55,13 @@ export const SSEEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stage"), stage: z.string() }),
   z.object({ type: z.literal("done"), report: z.any().optional() }),
   z.object({ type: z.literal("error"), message: z.string() }),
+  z.object({
+    type: z.literal("llm_warning"),
+    code: z.string(),
+    message: z.string(),
+    personaId: z.string().optional(),
+    attempt: z.number().optional(),
+  }),
 ]);
 export type SSEEvent = z.infer<typeof SSEEventSchema>;
 

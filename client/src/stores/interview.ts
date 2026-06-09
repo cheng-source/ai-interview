@@ -153,6 +153,14 @@ export const useInterviewStore = defineStore("interview", () => {
             break;
           }
 
+          case "llm_warning":
+            console.warn("LLM warning:", data);
+            statusText.value = data.message || statusText.value;
+            if (data.message && !stageLog.value.some(s => s.label === data.message && s.type === 'active')) {
+              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+              stageLog.value.push({ label: data.message, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+            }
+            break;
           case "error":
             console.error("Stream error:", data.message);
             addMessage("system", `错误: ${data.message}`);
