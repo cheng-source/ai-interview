@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, UseGuards, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { PositionService } from './position.service';
 
+@UseGuards(AdminAuthGuard)
 @Controller('api/positions')
 export class PositionController {
   constructor(private readonly positionService: PositionService) {}

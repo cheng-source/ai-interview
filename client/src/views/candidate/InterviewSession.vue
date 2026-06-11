@@ -3,6 +3,7 @@
     v-if="!session.started"
     v-model:manualResumeText="session.manualResumeText"
     :pageLoading="session.pageLoading"
+    :error="session.pageError"
     :loading="session.loading"
     :candidateName="session.candidateName"
     :positionTitle="session.positionTitle"

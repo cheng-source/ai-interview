@@ -23,7 +23,7 @@
               {{ row.interviews[0].interviewType === 'behavioral' ? '行为面' : '技术面' }}
             </el-tag>
             <span class="text-xs text-gray-400 max-w-52 truncate inline-block align-middle mr-2">
-              {{ `${BASE}/interview/${row.interviews[0].id}` }}
+              {{ `${BASE}/interview/${row.interviews[0].id}?token=******` }}
             </span>
             <el-button size="small" text @click="copyLink(row.interviews[0].id)">复制</el-button>
           </template>
@@ -187,7 +187,8 @@ async function confirmCreateInterview() {
 }
 
 async function copyLink(id: string) {
-  await navigator.clipboard.writeText(`${BASE}/interview/${id}`);
+  const res = await interviewsApi.rotateAccessToken(id);
+  await navigator.clipboard.writeText(`${BASE}/interview/${id}?token=${res.data.accessToken}`);
   copiedId.value = id;
   setTimeout(() => { copiedId.value = ''; }, 2000);
 }

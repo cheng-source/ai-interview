@@ -42,6 +42,8 @@ model Interview {
   stateJson     Json?
   status        String    @default("pending")
   interviewType String    @default("technical") // technical | behavioral
+  accessTokenHash String?
+  accessTokenExpiresAt DateTime?
   startedAt     DateTime?
   endedAt       DateTime?
   lastActiveAt  DateTime?

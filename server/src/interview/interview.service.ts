@@ -3,6 +3,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { createInterviewGraph } from "../langgraph/interview.graph";
 import { MemorySaver } from "@langchain/langgraph";
 import Redis from "ioredis";
+import { randomBytes } from "node:crypto";
+import { safeEqualHex, sha256Hex } from "../auth/token.util";
 import {
   SseDeps,
   saveStateToRedis,
@@ -43,10 +45,48 @@ export class InterviewService {
 
   async createInterview(candidateId: string, positionId: string, interviewType: string) {
     const threadId = `interview-${Date.now()}`;
-    return this.prisma.interview.create({
-      data: { candidateId, positionId, threadId, status: "pending", interviewType },
+    const accessToken = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + Number(process.env.INTERVIEW_TOKEN_TTL_DAYS || 7) * 86400 * 1000);
+    const interview = await this.prisma.interview.create({
+      data: {
+        candidateId,
+        positionId,
+        threadId,
+        status: "pending",
+        interviewType,
+        accessTokenHash: sha256Hex(accessToken),
+        accessTokenExpiresAt: expiresAt,
+      } as any,
       include: { candidate: true, position: true },
     });
+    return { ...interview, accessToken };
+  }
+
+  async assertInterviewAccess(interviewId: string, token?: string | null) {
+    const interview = await this.prisma.interview.findUnique({ where: { id: interviewId } });
+    if (!interview) throw new Error("Interview not found");
+    const tokenHash = (interview as any).accessTokenHash as string | null;
+    const expiresAt = (interview as any).accessTokenExpiresAt as Date | null;
+
+    if (!token || !tokenHash || !expiresAt || expiresAt.getTime() <= Date.now()) {
+      throw new Error("Interview token is invalid or expired");
+    }
+    if (!safeEqualHex(sha256Hex(token), tokenHash)) {
+      throw new Error("Interview token is invalid or expired");
+    }
+  }
+
+  async rotateInterviewAccessToken(interviewId: string) {
+    const accessToken = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + Number(process.env.INTERVIEW_TOKEN_TTL_DAYS || 7) * 86400 * 1000);
+    const interview = await this.prisma.interview.update({
+      where: { id: interviewId },
+      data: {
+        accessTokenHash: sha256Hex(accessToken),
+        accessTokenExpiresAt: expiresAt,
+      } as any,
+    });
+    return { interviewId: interview.id, accessToken, accessTokenExpiresAt: expiresAt };
   }
 
   // ---- 状态查询 ----
@@ -133,19 +173,19 @@ export class InterviewService {
     return asyncIterableToObservable(this.startStream(interviewId, resumeText));
   }
 
-  answerStream(interviewId: string, userMessage: string) {
-    return streamAnswer(this.deps, interviewId, userMessage);
+  answerStream(interviewId: string, userMessage: string, clientMessageId?: string) {
+    return streamAnswer(this.deps, interviewId, userMessage, clientMessageId);
   }
 
-  answerStream$(interviewId: string, userMessage: string) {
-    return asyncIterableToObservable(this.answerStream(interviewId, userMessage));
+  answerStream$(interviewId: string, userMessage: string, clientMessageId?: string) {
+    return asyncIterableToObservable(this.answerStream(interviewId, userMessage, clientMessageId));
   }
 
-  interviewStream(interviewId: string, userMessage?: string) {
-    return streamInterview(this.deps, interviewId, userMessage);
+  interviewStream(interviewId: string, userMessage?: string, clientMessageId?: string) {
+    return streamInterview(this.deps, interviewId, userMessage, clientMessageId);
   }
 
-  interviewStream$(interviewId: string, userMessage?: string) {
-    return asyncIterableToObservable(this.interviewStream(interviewId, userMessage));
+  interviewStream$(interviewId: string, userMessage?: string, clientMessageId?: string) {
+    return asyncIterableToObservable(this.interviewStream(interviewId, userMessage, clientMessageId));
   }
 }

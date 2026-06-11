@@ -7,6 +7,11 @@
       加载中...
     </div>
 
+    <div v-else-if="error" class="max-w-[480px] mx-auto mt-40 text-center">
+      <div class="text-red-500 text-lg mb-4">{{ error }}</div>
+      <p class="text-gray-400 text-sm">如有疑问，请联系 HR 获取有效面试链接</p>
+    </div>
+
     <div v-else class="max-w-[480px] mx-auto mt-20 p-10 text-center">
       <h1 class="text-[28px] text-gray-800 mb-2">AI 智能面试</h1>
       <p class="text-gray-500 text-sm mb-8">请确认以下信息，准备开始面试</p>
@@ -68,6 +73,7 @@
 <script setup lang="ts">
 defineProps<{
   pageLoading: boolean;
+  error: string;
   loading: boolean;
   candidateName: string;
   positionTitle: string;

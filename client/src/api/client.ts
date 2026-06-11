@@ -5,6 +5,28 @@ const api = axios.create({
   timeout: 30000,
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('adminToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && window.location.pathname.startsWith('/admin')) {
+      localStorage.removeItem('adminToken');
+      window.location.href = `/admin/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    }
+    return Promise.reject(error);
+  },
+);
+
+export const authApi = {
+  login: (data: { username: string; password: string }) =>
+    api.post<{ accessToken: string; expiresIn: number }>('/auth/login', data),
+};
+
 export const positionsApi = {
   list: () => api.get('/positions'),
   get: (id: string) => api.get(`/positions/${id}`),
@@ -30,6 +52,8 @@ export const interviewsApi = {
   list: () => api.get('/interviews'),
   create: (data: { candidateId: string; positionId: string; interviewType: string }) =>
     api.post('/interviews', data),
+  rotateAccessToken: (id: string) =>
+    api.post<{ interviewId: string; accessToken: string; accessTokenExpiresAt: string }>(`/interviews/${id}/access-token`),
   start: (id: string, resumeText: string) =>
     api.post(`/interviews/${id}/start`, { resumeText }),
   uploadResume: (file: File) => {
@@ -37,9 +61,10 @@ export const interviewsApi = {
     form.append('file', file);
     return api.post<{ text: string }>('/interviews/upload-resume', form);
   },
-  getState: (id: string) => api.get(`/interviews/${id}/state`),
-  sendMessage: (id: string, message: string) =>
-    api.post(`/interviews/${id}/message`, { message }),
+  getState: (id: string, token?: string) =>
+    api.get(`/interviews/${id}/state`, { headers: token ? { 'X-Interview-Token': token } : undefined }),
+  sendMessage: (id: string, message: string, clientMessageId?: string) =>
+    api.post(`/interviews/${id}/message`, { message, clientMessageId }),
   getStreamUrl: (id: string) => `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/stream`,
 };
 

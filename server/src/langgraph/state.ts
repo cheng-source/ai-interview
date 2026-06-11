@@ -54,6 +54,10 @@ export const InterviewStateAnnotation = Annotation.Root({
     reducer: (_, next) => next,
     default: () => '',
   }),
+  processedClientMessageIds: Annotation<string[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
   resumeText: Annotation<string>({
     reducer: (_, next) => next,
     default: () => '',

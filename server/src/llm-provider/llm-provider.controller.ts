@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, UseGuards, Delete, Get, Param, Post, Put } from "@nestjs/common";
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { LlmProviderService } from "./llm-provider.service";
 import type { DefaultProviderDto, UpsertProviderDto } from "./dto";
 
+@UseGuards(AdminAuthGuard)
 @Controller("api/llm-providers")
 export class LlmProviderController {
   constructor(private readonly service: LlmProviderService) {}

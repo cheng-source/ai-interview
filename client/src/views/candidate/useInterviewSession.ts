@@ -5,11 +5,13 @@ import { buildRestoredInterview } from "./restore";
 
 export function useInterviewSession(interviewId: string) {
   const store = useInterviewStore();
+  const interviewToken = new URLSearchParams(window.location.search).get("token") || "";
   const manualResumeText = ref("");
   const sending = ref(false);
   const loading = ref(false);
   const started = ref(false);
   const pageLoading = ref(true);
+  const pageError = ref("");
   const candidateName = ref("");
   const positionTitle = ref("");
   const positionDepartment = ref("");
@@ -74,7 +76,8 @@ export function useInterviewSession(interviewId: string) {
 
   async function tryResume() {
     try {
-      const res = await interviewsApi.getState(interviewId);
+      if (interviewToken) store.setInterviewToken(interviewToken);
+      const res = await interviewsApi.getState(interviewId, interviewToken);
       const {
         state,
         status,
@@ -132,6 +135,15 @@ export function useInterviewSession(interviewId: string) {
     } catch (error) {
       console.error("恢复面试失败:", error);
       pageLoading.value = false;
+      // 区分 token 错误和网络错误
+      const status = (error as any)?.response?.status;
+      if (status === 401) {
+        pageError.value = "面试链接已失效或 token 错误，请联系 HR 获取有效链接";
+      } else if (status === 404 || (error as any)?.message?.includes("not found")) {
+        pageError.value = "面试不存在，请确认链接是否正确";
+      } else {
+        pageError.value = "加载失败，请检查网络后刷新重试";
+      }
     }
   }
 
@@ -151,6 +163,7 @@ export function useInterviewSession(interviewId: string) {
     loading,
     started,
     pageLoading,
+    pageError,
     candidateName,
     positionTitle,
     positionDepartment,

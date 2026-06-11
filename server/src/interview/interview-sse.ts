@@ -12,6 +12,8 @@ import { Observable } from "rxjs";
 
 const STATE_TTL = 86400;
 const activeInterviewStreams = new Map<string, InterviewStreamContext>();
+const inFlightClientMessages = new Set<string>();
+const activeAnswerLocks = new Set<string>();
 
 /** 依赖注入——SSE 流式方法需要的共享资源 */
 export interface SseDeps {
@@ -300,6 +302,7 @@ export async function* streamAnswer(
   deps: SseDeps,
   interviewId: string,
   userMessage: string,
+  clientMessageId?: string,
 ) {
   const interview = await deps.prisma.interview.findUnique({
     where: { id: interviewId },
@@ -312,6 +315,44 @@ export async function* streamAnswer(
     .catch(() => {});
 
   const config = { configurable: { thread_id: interview.threadId } };
+  const dedupeKey = clientMessageId ? `${interviewId}:${clientMessageId}` : "";
+
+  if (clientMessageId) {
+    const state = await deps.graph.getState(config);
+    const processed = Array.isArray(state?.values?.processedClientMessageIds)
+      ? state.values.processedClientMessageIds
+      : [];
+    if (processed.includes(clientMessageId) || inFlightClientMessages.has(dedupeKey)) {
+      yield {
+        type: "llm_warning",
+        code: "DUPLICATE_MESSAGE",
+        message: "检测到重复提交，本次请求已忽略。",
+      };
+      const values = hasRestorableStateValues(state?.values)
+        ? normalizeStateValues(state.values, (state as any).next)
+        : null;
+      if (values?.currentStage) yield { type: "stage", stage: values.currentStage };
+      return;
+    }
+    inFlightClientMessages.add(dedupeKey);
+  }
+
+  if (activeAnswerLocks.has(interviewId)) {
+    const state = await deps.graph.getState(config);
+    yield {
+      type: "llm_warning",
+      code: "ANSWER_IN_PROGRESS",
+      message: "上一条回答仍在处理中，请稍候。",
+    };
+    const values = hasRestorableStateValues(state?.values)
+      ? normalizeStateValues(state.values, (state as any).next)
+      : null;
+    if (values?.currentStage) yield { type: "stage", stage: values.currentStage };
+    if (dedupeKey) inFlightClientMessages.delete(dedupeKey);
+    return;
+  }
+  activeAnswerLocks.add(interviewId);
+
   const queue = createStreamingContext();
   registerActiveInterviewStream(interviewId, queue);
 
@@ -321,8 +362,19 @@ export async function* streamAnswer(
       console.log("[streamAnswer] state.next:", (state as any)?.next);
       console.log("[streamAnswer] currentStage:", state?.values?.currentStage);
       console.log("[streamAnswer] tasks:", (state as any)?.tasks);
+      const processedClientMessageIds = clientMessageId
+        ? [
+            ...new Set([
+              ...((state?.values?.processedClientMessageIds as string[] | undefined) || []),
+              clientMessageId,
+            ]),
+          ]
+        : undefined;
+      const stateUpdate = clientMessageId
+        ? { candidateAnswer: userMessage, processedClientMessageIds }
+        : { candidateAnswer: userMessage };
       try {
-        await deps.graph.updateState(config, { candidateAnswer: userMessage });
+        await deps.graph.updateState(config, stateUpdate);
       } catch (e: any) {
         const nextNodes = Array.isArray((state as any)?.next)
           ? ((state as any).next as string[])
@@ -340,7 +392,7 @@ export async function* streamAnswer(
         ) {
           await deps.graph.updateState(
             config,
-            { candidateAnswer: userMessage },
+            stateUpdate,
             "answer_candidate_questions",
           );
         } else {
@@ -371,6 +423,8 @@ export async function* streamAnswer(
         }
       } catch {}
       await saveStateToRedis(deps, interview.threadId);
+      if (dedupeKey) inFlightClientMessages.delete(dedupeKey);
+      activeAnswerLocks.delete(interviewId);
       clearStreamingContext();
       clearActiveInterviewStream(interviewId, queue);
       queue.done();
@@ -385,9 +439,10 @@ export async function* streamInterview(
   deps: SseDeps,
   interviewId: string,
   userMessage?: string,
+  clientMessageId?: string,
 ) {
   if (userMessage) {
-    yield* streamAnswer(deps, interviewId, userMessage);
+    yield* streamAnswer(deps, interviewId, userMessage, clientMessageId);
   } else {
     const activeStream = getActiveInterviewStream(interviewId);
     if (activeStream) {

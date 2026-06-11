@@ -62,5 +62,6 @@ export interface InterviewState {
   reportText: string;                                              // 最终评估报告文本
   qaCount: number;                                                 // 反问环节已提问数，上限5个
   candidateAnswer: string;                                         // 当前轮次候选人的输入
+  processedClientMessageIds?: string[];                            // 已处理的客户端消息 ID，用于防止重复提交
   resumeText?: string;                                             // 简历原文，仅在创建面试时传入
 }

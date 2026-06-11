@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, UseGuards, Get, Post, Put, Delete, Param, Body, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CandidateService } from './candidate.service';
 
+@UseGuards(AdminAuthGuard)
 @Controller('api/candidates')
 export class CandidateController {
   constructor(private readonly candidateService: CandidateService) {}

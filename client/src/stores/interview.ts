@@ -8,10 +8,18 @@ const stageLabelMap: Record<string, string> = {
 };
 function stageLabel(s: string): string { return stageLabelMap[s] || s; }
 
+function createClientMessageId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export const useInterviewStore = defineStore("interview", () => {
   const messages = ref<ChatMessage[]>([]);
   const currentStage = ref("");
   const interviewType = ref("technical");
+  const interviewToken = ref("");
   const statusText = ref("");
   const interviewId = ref("");
   const isConnected = ref(false);
@@ -33,6 +41,12 @@ export const useInterviewStore = defineStore("interview", () => {
   };
 
   const addSystemMessage = (content: string) => addMessage("system", content);
+
+  const setInterviewToken = (token: string) => {
+    interviewToken.value = token;
+  };
+
+  const apiUrl = (path: string) => `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}${path}`;
 
   const hasSameLastMessage = (role: string, content: string, stage?: string) => {
     const last = messages.value[messages.value.length - 1];
@@ -188,10 +202,13 @@ export const useInterviewStore = defineStore("interview", () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/start`,
+        apiUrl(`/interviews/${id}/start`),
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(interviewToken.value ? { "X-Interview-Token": interviewToken.value } : {}),
+          },
           body: JSON.stringify({ resumeText }),
           signal: abortController.signal,
         },
@@ -226,11 +243,14 @@ export const useInterviewStore = defineStore("interview", () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${interviewId.value}/message`,
+        apiUrl(`/interviews/${interviewId.value}/message`),
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: answer }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(interviewToken.value ? { "X-Interview-Token": interviewToken.value } : {}),
+          },
+          body: JSON.stringify({ message: answer, clientMessageId: createClientMessageId() }),
           signal: abortController.signal,
         },
       );
@@ -256,8 +276,11 @@ export const useInterviewStore = defineStore("interview", () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/stream`,
-        { signal: abortController.signal },
+        apiUrl(`/interviews/${id}/stream`),
+        {
+          signal: abortController.signal,
+          headers: interviewToken.value ? { "X-Interview-Token": interviewToken.value } : undefined,
+        },
       );
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -279,6 +302,7 @@ export const useInterviewStore = defineStore("interview", () => {
     currentStage.value = "";
     statusText.value = "";
     interviewId.value = "";
+    interviewToken.value = "";
     isConnected.value = false;
     report.value = null;
     stageLog.value = [];
@@ -305,6 +329,7 @@ export const useInterviewStore = defineStore("interview", () => {
     sendAnswer,
     resumeStream,
     addMessage,
+    setInterviewToken,
     cleanup,
     addSystemMessage,
   };

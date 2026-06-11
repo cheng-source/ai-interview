@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Delete, Param, Body, Query, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, UseGuards, Get, Post, Delete, Param, Body, Query, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { KnowledgeService } from './knowledge.service';
 
+@UseGuards(AdminAuthGuard)
 @Controller('api/knowledge')
 export class KnowledgeController {
   constructor(private readonly knowledgeService: KnowledgeService) {}

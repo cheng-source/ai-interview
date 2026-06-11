@@ -9,6 +9,11 @@ const router = createRouter({
       component: () => import('../views/candidate/InterviewSession.vue'),
     },
     {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: () => import('../views/admin/Login.vue'),
+    },
+    {
       path: '/admin',
       name: 'dashboard',
       component: () => import('../views/admin/Dashboard.vue'),
@@ -44,6 +49,12 @@ const router = createRouter({
       component: () => import('../views/admin/LlmProviders.vue'),
     },
   ],
+});
+
+router.beforeEach((to) => {
+  if (to.path.startsWith('/admin') && to.path !== '/admin/login' && !localStorage.getItem('adminToken')) {
+    return { path: '/admin/login', query: { redirect: to.fullPath } };
+  }
 });
 
 export default router;

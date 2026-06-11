@@ -339,12 +339,103 @@ async function invokePersonaOnce(
   return { response, content };
 }
 
+// ---- LLM Mock（LLM_MOCK=true 时跳过真实 API 调用）----
+// 用于压测系统基础设施（LangGraph + SSE + Redis + DB），不消耗 API 额度
+
+function isMockEnabled(): boolean {
+  return process.env.LLM_MOCK === "true";
+}
+
+function generateFakeValue(key: string, schema: z.ZodTypeAny): any {
+  const inner = schema instanceof z.ZodDefault || schema instanceof z.ZodOptional
+    ? (schema as any)._def.innerType || schema
+    : schema;
+
+  if (inner instanceof z.ZodString) return `mock_${key}_${Date.now()}`;
+  if (inner instanceof z.ZodNumber) return Math.floor(Math.random() * 100);
+  if (inner instanceof z.ZodBoolean) return true;
+  if (inner instanceof z.ZodArray) return [];
+  if (inner instanceof z.ZodEnum) return (inner as any)._def.values?.[0] || "mock";
+  if (inner instanceof z.ZodObject) {
+    const shape = (inner as any)._def.shape();
+    if (typeof shape === "function") {
+      const obj: Record<string, any> = {};
+      for (const k of Object.keys(shape())) obj[k] = generateFakeValue(k, shape()[k]);
+      return obj;
+    }
+  }
+  return "mock";
+}
+
+function generateFakeStructuredOutput(persona: PersonaDefinition): any {
+  if (!persona.schema) return { mock: true };
+  const unwrapped = persona.schema instanceof z.ZodDefault
+    ? (persona.schema as any)._def.innerType
+    : persona.schema;
+  if (unwrapped instanceof z.ZodObject) {
+    const shape = (unwrapped as any)._def.shape();
+    const obj: Record<string, any> = {};
+    if (typeof shape === "function") {
+      for (const key of Object.keys(shape())) {
+        try { obj[key] = generateFakeValue(key, shape()[key]); }
+        catch { obj[key] = "mock"; }
+      }
+    }
+    return obj;
+  }
+  return { mock: true };
+}
+
+const FAKE_TOKENS = ["好的", "，", "让我", "来", "分析", "一下", "。", "根据", "你的", "简历", "，"];
+
+async function mockExecutePersona(
+  persona: PersonaDefinition,
+  options?: PersonaExecuteOptions,
+): Promise<PersonaResult> {
+  const silent = options?.silent || false;
+
+  if (persona.outputMode === "structured") {
+    // 结构化输出：模拟 100-300ms 延迟后返回假数据
+    if (!silent) pushEvent({ type: "status", content: persona.name + " (mock)" });
+    await new Promise(r => setTimeout(r, 100 + Math.random() * 200));
+    const fakeResponse = generateFakeStructuredOutput(persona);
+    const fakeContent = JSON.stringify(fakeResponse);
+    if (!silent) {
+      pushEvent({ type: "token", content: fakeContent });
+      pushEvent({ type: "token_end" });
+    }
+    return { response: fakeResponse, content: fakeContent };
+  }
+
+  // 流式文本输出（如 icebreaker / tech_select 出题）
+  // 逐个推送假 token，模拟真实流式体验
+  if (!silent) pushEvent({ type: "status", content: persona.name + " (mock)" });
+
+  const tokens = [...FAKE_TOKENS];
+  let content = "";
+
+  for (const token of tokens) {
+    await new Promise(r => setTimeout(r, 30 + Math.random() * 50)); // 30-80ms / token
+    content += token;
+    if (!silent) pushEvent({ type: "token", content: token });
+  }
+
+  if (!silent) pushEvent({ type: "token_end" });
+
+  return { response: null, content };
+}
+
 /** 统一执行 persona：创建 LLM → 配置流式/结构化 → invoke，并处理 retry/repair/fallback */
 export async function executePersona(
   persona: PersonaDefinition,
   userMessage: any,
   options?: PersonaExecuteOptions,
 ): Promise<PersonaResult> {
+  // LLM Mock 模式：跳过真实 API 调用，用假数据替代
+  if (isMockEnabled()) {
+    return mockExecutePersona(persona, options);
+  }
+
   if (!options?.silent) {
     pushEvent({ type: "status", content: persona.name });
   }
