@@ -151,11 +151,13 @@ export function setRuntimeProviderSnapshot(snapshot: RuntimeProviderSnapshot) {
     providers: snapshot.providers.map((provider) => ({ ...provider })),
   };
   cachedEmbeddings = null;
+  clearLLMCache();
 }
 
 export function clearRuntimeProviderSnapshot() {
   runtimeProviderSnapshot = null;
   cachedEmbeddings = null;
+  clearLLMCache();
 }
 
 export function clearRuntimeProviderSnapshotForTest() {
@@ -222,28 +224,44 @@ class StreamingHandler extends BaseCallbackHandler {
   }
 }
 
-// ---- LLM factory ----
+// ---- LLM 实例缓存（按模型+温度+流式模式复用 ChatOpenAI 实例）----
+const llmCache = new Map<string, ChatOpenAI>();
+const sharedStreamingHandler = new StreamingHandler();
+
 export function createLLM(
   options: { temperature?: number; streaming?: boolean; providerId?: string } = {},
 ) {
   const provider = resolveChatProviderConfig(options.providerId);
+  const temperature = options.temperature ?? provider.temperature ?? 0.5;
+  const streaming = options.streaming ?? false;
+  const cacheKey = `${provider.model}::${temperature}::${streaming}`;
+
+  const cached = llmCache.get(cacheKey);
+  if (cached) return cached;
+
   const opts: any = {
     model: provider.model,
-    temperature: options.temperature ?? provider.temperature ?? 0.5,
+    temperature,
     apiKey: provider.apiKey,
     configuration: {
       baseURL: provider.baseURL,
     },
   };
-  if (options.streaming) {
+  if (streaming) {
     opts.streaming = true;
-    opts.callbacks = [new StreamingHandler()];
+    opts.callbacks = [sharedStreamingHandler]; // AsyncLocalStorage 天然隔离，单例即可
   }
   const llm = new ChatOpenAI(opts);
   // 覆盖 modelName 为 tiktoken 已知的模型，避免 "Unknown model" 警告
   // model 保持不变用于 API 请求，modelName 仅用于 token 估算
   llm.modelName = "gpt-4";
+  llmCache.set(cacheKey, llm);
   return llm;
+}
+
+/** 清空 LLM 实例缓存（provider 配置变更时调用） */
+export function clearLLMCache() {
+  llmCache.clear();
 }
 
 // ---- Embedding factory ----

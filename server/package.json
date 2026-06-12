@@ -10,6 +10,7 @@
     "@langchain/community": "^0.3.0",
     "@langchain/core": "^0.3.0",
     "@langchain/langgraph": "^0.2.0",
+    "@langchain/langgraph-checkpoint-redis": "^0.0.2",
     "@langchain/openai": "^0.3.0",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.3.0",

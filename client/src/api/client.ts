@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || 'http://localhost:3000/api',
+// ========== Axios 实例 ==========
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE || 'http://localhost:3100/api',
   timeout: 30000,
 });
 
@@ -22,98 +23,125 @@ api.interceptors.response.use(
   },
 );
 
-export const authApi = {
-  login: (data: { username: string; password: string }) =>
-    api.post<{ accessToken: string; expiresIn: number }>('/auth/login', data),
-};
-
-export const positionsApi = {
-  list: () => api.get('/positions'),
-  get: (id: string) => api.get(`/positions/${id}`),
-  create: (data: any) => api.post('/positions', data),
-  update: (id: string, data: any) => api.put(`/positions/${id}`, data),
-  delete: (id: string) => api.delete(`/positions/${id}`),
-};
-
-export const candidatesApi = {
-  list: () => api.get('/candidates'),
-  get: (id: string) => api.get(`/candidates/${id}`),
-  create: (data: any) => api.post('/candidates', data),
-  update: (id: string, data: any) => api.put(`/candidates/${id}`, data),
-  delete: (id: string) => api.delete(`/candidates/${id}`),
-  uploadResume: (id: string, file: File) => {
-    const form = new FormData();
-    form.append('file', file);
-    return api.post<{ text: string; fileName: string }>(`/candidates/${id}/resume`, form);
-  },
-};
-
-export const interviewsApi = {
-  list: () => api.get('/interviews'),
-  create: (data: { candidateId: string; positionId: string; interviewType: string }) =>
-    api.post('/interviews', data),
-  rotateAccessToken: (id: string) =>
-    api.post<{ interviewId: string; accessToken: string; accessTokenExpiresAt: string }>(`/interviews/${id}/access-token`),
-  start: (id: string, resumeText: string) =>
-    api.post(`/interviews/${id}/start`, { resumeText }),
-  uploadResume: (file: File) => {
-    const form = new FormData();
-    form.append('file', file);
-    return api.post<{ text: string }>('/interviews/upload-resume', form);
-  },
-  getState: (id: string, token?: string) =>
-    api.get(`/interviews/${id}/state`, { headers: token ? { 'X-Interview-Token': token } : undefined }),
-  sendMessage: (id: string, message: string, clientMessageId?: string) =>
-    api.post(`/interviews/${id}/message`, { message, clientMessageId }),
-  getStreamUrl: (id: string) => `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}/interviews/${id}/stream`,
-};
-
-export function createSSEConnection(url: string, onMessage: (data: any) => void): EventSource {
-  const eventSource = new EventSource(url);
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      onMessage(data);
-    } catch {
-      onMessage({ type: 'raw', content: event.data });
-    }
-  };
-  eventSource.onerror = () => {
-    console.error('SSE connection error, auto-reconnecting...');
-  };
-  return eventSource;
+// ========== 基础 URL ==========
+export function getBaseURL(): string {
+  return import.meta.env.VITE_API_BASE || 'http://localhost:3100/api';
 }
 
-export const knowledgeApi = {
-  list: () => api.get('/knowledge'),
-  search: (q: string) => api.get('/knowledge/search', { params: { q } }),
-  upload: (data: { title: string; content: string; category: string }) =>
-    api.post('/knowledge', data),
-  uploadFile: (title: string, category: string, file: File) => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('title', title);
-    form.append('category', category);
-    return api.post('/knowledge/upload-file', form);
-  },
-  delete: (id: string) => api.delete(`/knowledge/${id}`),
-};
+// ========== SSE 流式请求 ==========
+export interface SSERequestOptions {
+  method?: 'GET' | 'POST';
+  body?: unknown;
+  token?: string;
+}
 
-export const llmProvidersApi = {
-  list: () => api.get('/llm-providers'),
-  create: (data: any) => api.post('/llm-providers', data),
-  update: (id: string, data: any) => api.put(`/llm-providers/${id}`, data),
-  delete: (id: string) => api.delete(`/llm-providers/${id}`),
-  test: (id: string) => api.post(`/llm-providers/${id}/test`),
-  getDefault: () => api.get('/llm-providers/default'),
-  updateDefault: (defaultProvider: string) =>
-    api.put('/llm-providers/default', { defaultProvider }),
-  updateDefaultEmbedding: (defaultEmbeddingProvider: string) =>
-    api.put('/llm-providers/default-embedding', { defaultEmbeddingProvider }),
-  reload: () => api.post('/llm-providers/reload'),
-};
+export interface SSERequestResult {
+  response: Promise<Response>;
+  abort: () => void;
+}
 
-export const reportsApi = {
-  list: () => api.get('/reports'),
-  get: (interviewId: string) => api.get(`/reports/${interviewId}`),
-};
+/** 创建一个可取消的 SSE fetch 请求，返回原始 Response（含 ReadableStream body） */
+export function createSSERequest(path: string, options: SSERequestOptions = {}): SSERequestResult {
+  const { method = 'POST', body, token } = options;
+  const controller = new AbortController();
+  const url = `${getBaseURL()}${path}`;
+
+  const headers: Record<string, string> = {};
+  if (body != null) headers['Content-Type'] = 'application/json';
+  if (token) headers['X-Interview-Token'] = token;
+
+  const response = fetch(url, {
+    method,
+    headers,
+    body: body != null ? JSON.stringify(body) : undefined,
+    signal: controller.signal,
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res;
+  });
+
+  return { response, abort: () => controller.abort() };
+}
+
+// ========== SSE 流解析 ==========
+export interface SSEHandlers {
+  onStatus?: (content: string) => void;
+  onToken?: (content: string) => string | null; // 返回 streamingMsgId，首次返回新 id，后续返回 null
+  onTokenEnd?: () => void;
+  onEvaluation?: (data: any) => void;
+  onMessage?: (content: string, stage?: string) => void;
+  onStage?: (stage: string) => void;
+  onDone?: (report: any) => void;
+  onWarning?: (message: string) => void;
+  onError?: (message: string) => void;
+  onEvent?: (data: any) => void;
+}
+
+/** 通用 SSE ReadableStream 解析器 */
+export async function readSSEStream(response: Response, handlers: SSEHandlers): Promise<void> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let streamingMsgId: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = JSON.parse(line.slice(6));
+      handlers.onEvent?.(data);
+
+      switch (data.type) {
+        case 'status':
+          handlers.onStatus?.(data.content);
+          break;
+
+        case 'token': {
+          const msgId = handlers.onToken?.(data.content);
+          if (msgId) streamingMsgId = msgId;
+          break;
+        }
+
+        case 'token_end':
+          handlers.onTokenEnd?.();
+          streamingMsgId = null;
+          break;
+
+        case 'evaluation':
+          handlers.onEvaluation?.(data);
+          break;
+
+        case 'message':
+          handlers.onMessage?.(data.content, data.stage);
+          break;
+
+        case 'stage':
+          handlers.onStage?.(data.stage);
+          break;
+
+        case 'done':
+          handlers.onDone?.(data.report);
+          break;
+
+        case 'llm_warning':
+          handlers.onWarning?.(data.message);
+          break;
+
+        case 'error':
+          handlers.onError?.(data.message);
+          break;
+      }
+    }
+  }
+
+  // 如果流结束但 streamingMsgId 未清除，补发 token_end
+  if (streamingMsgId) {
+    handlers.onTokenEnd?.();
+  }
+}

@@ -20,8 +20,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { positionsApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { positionApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const route = useRoute(); const router = useRouter();
 const isNew = computed(() => !route.params.id || route.params.id === 'new');
@@ -29,7 +29,7 @@ const form = ref({ title: '', department: '', jdText: '', techStack: [] as strin
 const techStackStr = ref('');
 onMounted(async () => {
   if (!isNew.value) {
-    const res = await positionsApi.get(route.params.id as string);
+    const res = await positionApi.get(route.params.id as string);
     const data = res.data;
     form.value = { title: data.title, department: data.department, jdText: data.jdText, techStack: data.techStack || [], level: data.level };
     techStackStr.value = (data.techStack || []).join(', ');
@@ -37,8 +37,8 @@ onMounted(async () => {
 });
 async function handleSave() {
   const payload = { ...form.value, techStack: techStackStr.value.split(',').map((s) => s.trim()).filter(Boolean) };
-  if (isNew.value) await positionsApi.create(payload);
-  else await positionsApi.update(route.params.id as string, payload);
+  if (isNew.value) await positionApi.create(payload);
+  else await positionApi.update(route.params.id as string, payload);
   router.push('/admin/positions');
 }
 </script>

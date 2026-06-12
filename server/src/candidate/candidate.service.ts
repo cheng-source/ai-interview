@@ -33,6 +33,10 @@ export class CandidateService {
     return this.prisma.candidate.delete({ where: { id } });
   }
 
+  async batchRemove(ids: string[]) {
+    return this.prisma.candidate.deleteMany({ where: { id: { in: ids } } });
+  }
+
   async extractResumeText(file: Express.Multer.File): Promise<string> {
     const mimetype = file.mimetype;
     const ext = file.originalname?.split(".").pop()?.toLowerCase();

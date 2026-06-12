@@ -34,14 +34,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { positionsApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { positionApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const loading = ref(true);
 const positions = ref<any[]>([]);
 onMounted(async () => {
   try {
-    const res = await positionsApi.list();
+    const res = await positionApi.list();
     positions.value = res.data;
   } catch {
     ElMessage.error('加载岗位列表失败');
@@ -51,7 +51,7 @@ onMounted(async () => {
 });
 async function handleDelete(id: string) {
   try {
-    await positionsApi.delete(id);
+    await positionApi.delete(id);
     positions.value = positions.value.filter((p) => p.id !== id);
     ElMessage.success('删除成功');
   } catch {

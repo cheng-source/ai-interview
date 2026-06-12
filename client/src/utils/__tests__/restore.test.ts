@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildRestoredInterview } from "./restore.ts";
+import { buildRestoredInterview } from "../restore.ts";
 
 const now = new Date("2026-06-06T10:00:00Z").getTime();
 

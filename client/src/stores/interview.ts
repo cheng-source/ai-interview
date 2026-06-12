@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { ChatMessage } from "../types";
-import { useInterviewTimer } from "./timer";
+import { useInterviewTimer } from "@/composables/useTimer";
+import { interviewApi, readSSEStream, type SSEHandlers } from "../api";
 
 const stageLabelMap: Record<string, string> = {
   icebreaker: '自我介绍', technical: '技术面', behavioral: '行为面', qa: '反问', done: '完成',
@@ -26,7 +27,7 @@ export const useInterviewStore = defineStore("interview", () => {
   const report = ref<any>(null);
   const stageLog = ref<Array<{ label: string; time: string; type: 'completed' | 'active' }>>([]);
   const evaluations = ref<Array<{ questionText: string; score: number; summary: string; stage: string }>>([]);
-  let abortController: AbortController | null = null;
+  let abortFn: (() => void) | null = null;
 
   const timer = useInterviewTimer();
 
@@ -46,8 +47,6 @@ export const useInterviewStore = defineStore("interview", () => {
     interviewToken.value = token;
   };
 
-  const apiUrl = (path: string) => `${import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'}${path}`;
-
   const hasSameLastMessage = (role: string, content: string, stage?: string) => {
     const last = messages.value[messages.value.length - 1];
     return !!last
@@ -56,142 +55,113 @@ export const useInterviewStore = defineStore("interview", () => {
       && (last.stage || "") === (stage || "");
   };
 
-  async function readSSE(response: Response, onEvent?: (data: any) => void) {
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+  /** 构建 SSE 事件处理器（捕获 store 的响应式状态） */
+  function buildSSEHandlers(onEvent?: (data: any) => void): SSEHandlers {
     let streamingMsgId: string | null = null;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    return {
+      onEvent,
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = JSON.parse(line.slice(6));
-        onEvent?.(data);
-
-        switch (data.type) {
-          case "status":
-            statusText.value = data.content;
-            // 记录到执行时间线（去重：相同标签不重复添加）
-            if (data.content && !stageLog.value.some(s => s.label === data.content && s.type === 'active')) {
-              // 将之前的 active 项标记为 completed
-              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-              stageLog.value.push({ label: data.content, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
-            }
-            break;
-
-          case "token": {
-            if (!streamingMsgId) {
-              streamingMsgId = Date.now().toString();
-              messages.value.push({
-                id: streamingMsgId,
-                role: "interviewer",
-                content: data.content,
-                stage: "",
-                timestamp: Date.now(),
-                streaming: true,
-              });
-            } else {
-              const msg = messages.value.find((m) => m.id === streamingMsgId);
-              if (msg) msg.content += data.content;
-            }
-            statusText.value = "";
-            break;
-          }
-
-          case "token_end": {
-            if (streamingMsgId) {
-              const msg = messages.value.find((m) => m.id === streamingMsgId);
-              if (msg) {
-                msg.streaming = false;
-                timer.tryStartTimer(msg.content);
-              }
-              streamingMsgId = null;
-            }
-            // AI 输出完毕，等待用户回答
-            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-            stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
-            break;
-          }
-
-          case "evaluation": {
-            const ev = data.data || {};
-            evaluations.value.push({
-              questionText: ev.questionText || ev.question || '',
-              score: ev.score || 0,
-              summary: ev.summary || '',
-              stage: data.stage || currentStage.value,
-            });
-            // 将评估添加到时间线
-            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-            stageLog.value.push({ label: `评估完成 (${ev.score}/10)`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
-            statusText.value = "";
-            break;
-          }
-
-          case "message":
-            if (!hasSameLastMessage("interviewer", data.content, data.stage)) {
-              addMessage("interviewer", data.content, data.stage);
-            }
-            currentStage.value = data.stage || currentStage.value;
-            timer.tryStartTimer(data.content);
-            statusText.value = "";
-            // 记录到时间线
-            if (data.stage) {
-              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-              stageLog.value.push({ label: `${stageLabel(data.stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
-            }
-            // AI 输出完毕，等待用户回答
-            stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
-            break;
-
-          case "stage":
-            currentStage.value = data.stage;
-            // 记录阶段切换
-            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-            stageLog.value.push({ label: `进入${stageLabel(data.stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
-            break;
-
-          case "done": {
-            report.value = data.report;
-            currentStage.value = "done";
-            timer.stopAllTimers();
-            stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-            stageLog.value.push({ label: '面试完成', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
-            break;
-          }
-
-          case "llm_warning":
-            console.warn("LLM warning:", data);
-            statusText.value = data.message || statusText.value;
-            if (data.message && !stageLog.value.some(s => s.label === data.message && s.type === 'active')) {
-              stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
-              stageLog.value.push({ label: data.message, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
-            }
-            break;
-          case "error":
-            console.error("Stream error:", data.message);
-            addMessage("system", `错误: ${data.message}`);
-            break;
+      onStatus: (content) => {
+        statusText.value = content;
+        if (content && !stageLog.value.some(s => s.label === content && s.type === 'active')) {
+          stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+          stageLog.value.push({ label: content, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
         }
-      }
-    }
+      },
 
-    if (streamingMsgId) {
-      const msg = messages.value.find((m) => m.id === streamingMsgId);
-      if (msg) msg.streaming = false;
-    }
+      onToken: (content) => {
+        if (!streamingMsgId) {
+          streamingMsgId = Date.now().toString();
+          messages.value.push({
+            id: streamingMsgId,
+            role: "interviewer",
+            content,
+            stage: "",
+            timestamp: Date.now(),
+            streaming: true,
+          });
+          return streamingMsgId;
+        } else {
+          const msg = messages.value.find((m) => m.id === streamingMsgId);
+          if (msg) msg.content += content;
+          return null;
+        }
+      },
+
+      onTokenEnd: () => {
+        if (streamingMsgId) {
+          const msg = messages.value.find((m) => m.id === streamingMsgId);
+          if (msg) {
+            msg.streaming = false;
+            timer.tryStartTimer(msg.content);
+          }
+          streamingMsgId = null;
+        }
+        statusText.value = "";
+        stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+        stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
+      },
+
+      onEvaluation: (data) => {
+        const ev = data.data || {};
+        evaluations.value.push({
+          questionText: ev.questionText || ev.question || '',
+          score: ev.score || 0,
+          summary: ev.summary || '',
+          stage: data.stage || currentStage.value,
+        });
+        stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+        stageLog.value.push({ label: `评估完成 (${ev.score}/10)`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
+        statusText.value = "";
+      },
+
+      onMessage: (content, stage) => {
+        if (!hasSameLastMessage("interviewer", content, stage)) {
+          addMessage("interviewer", content, stage);
+        }
+        currentStage.value = stage || currentStage.value;
+        timer.tryStartTimer(content);
+        statusText.value = "";
+        if (stage) {
+          stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+          stageLog.value.push({ label: `${stageLabel(stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
+        }
+        stageLog.value.push({ label: '等待用户回答...', time: '', type: 'active' });
+      },
+
+      onStage: (stage) => {
+        currentStage.value = stage;
+        stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+        stageLog.value.push({ label: `进入${stageLabel(stage)}阶段`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+      },
+
+      onDone: (reportData) => {
+        report.value = reportData;
+        currentStage.value = "done";
+        timer.stopAllTimers();
+        stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+        stageLog.value.push({ label: '面试完成', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'completed' });
+      },
+
+      onWarning: (message) => {
+        console.warn("LLM warning:", message);
+        statusText.value = message || statusText.value;
+        if (message && !stageLog.value.some(s => s.label === message && s.type === 'active')) {
+          stageLog.value.forEach(s => { if (s.type === 'active') s.type = 'completed'; });
+          stageLog.value.push({ label: message, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), type: 'active' });
+        }
+      },
+
+      onError: (message) => {
+        console.error("Stream error:", message);
+        addMessage("system", `错误: ${message}`);
+      },
+    };
   }
 
   const startInterview = async (id: string, resumeText: string, onReady?: () => void) => {
     interviewId.value = id;
-    abortController = new AbortController();
     timer.startTotalTimer();
     let ready = false;
     const markReady = () => {
@@ -200,24 +170,14 @@ export const useInterviewStore = defineStore("interview", () => {
       onReady?.();
     };
 
-    try {
-      const response = await fetch(
-        apiUrl(`/interviews/${id}/start`),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(interviewToken.value ? { "X-Interview-Token": interviewToken.value } : {}),
-          },
-          body: JSON.stringify({ resumeText }),
-          signal: abortController.signal,
-        },
-      );
+    const { response, abort } = interviewApi.startStream(id, resumeText, interviewToken.value || undefined);
+    abortFn = abort;
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readSSE(response, (data) => {
+    try {
+      const res = await response;
+      await readSSEStream(res, buildSSEHandlers((data) => {
         if (["message", "token", "error", "done"].includes(data.type)) markReady();
-      });
+      }));
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error("Start interview error:", e);
@@ -225,7 +185,7 @@ export const useInterviewStore = defineStore("interview", () => {
       }
     } finally {
       markReady();
-      abortController = null;
+      abortFn = null;
       isConnected.value = true;
     }
   };
@@ -233,7 +193,6 @@ export const useInterviewStore = defineStore("interview", () => {
   const sendAnswer = async (answer: string, onReady?: () => void) => {
     timer.stopQuestionTimer();
     addMessage("candidate", answer, currentStage.value);
-    abortController = new AbortController();
     let ready = false;
     const markReady = () => {
       if (ready) return;
@@ -241,24 +200,16 @@ export const useInterviewStore = defineStore("interview", () => {
       onReady?.();
     };
 
-    try {
-      const response = await fetch(
-        apiUrl(`/interviews/${interviewId.value}/message`),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(interviewToken.value ? { "X-Interview-Token": interviewToken.value } : {}),
-          },
-          body: JSON.stringify({ message: answer, clientMessageId: createClientMessageId() }),
-          signal: abortController.signal,
-        },
-      );
+    const { response, abort } = interviewApi.sendMessage(
+      interviewId.value, answer, createClientMessageId(), interviewToken.value || undefined,
+    );
+    abortFn = abort;
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readSSE(response, (data) => {
+    try {
+      const res = await response;
+      await readSSEStream(res, buildSSEHandlers((data) => {
         if (["message", "token", "error", "done"].includes(data.type)) markReady();
-      });
+      }));
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error("Send answer error:", e);
@@ -266,37 +217,31 @@ export const useInterviewStore = defineStore("interview", () => {
       }
     } finally {
       markReady();
-      abortController = null;
+      abortFn = null;
     }
   };
 
   const resumeStream = async (id: string) => {
     interviewId.value = id;
-    abortController = new AbortController();
+
+    const { response, abort } = interviewApi.resumeStream(id, interviewToken.value || undefined);
+    abortFn = abort;
 
     try {
-      const response = await fetch(
-        apiUrl(`/interviews/${id}/stream`),
-        {
-          signal: abortController.signal,
-          headers: interviewToken.value ? { "X-Interview-Token": interviewToken.value } : undefined,
-        },
-      );
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await readSSE(response);
+      const res = await response;
+      await readSSEStream(res, buildSSEHandlers());
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error("Resume stream error:", e);
       }
     } finally {
-      abortController = null;
+      abortFn = null;
     }
   };
 
   const cleanup = () => {
-    abortController?.abort();
-    abortController = null;
+    abortFn?.();
+    abortFn = null;
     timer.stopAllTimers();
     messages.value = [];
     currentStage.value = "";

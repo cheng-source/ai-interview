@@ -32,6 +32,8 @@ model Candidate {
   position     Position @relation(fields: [positionId], references: [id])
   interviews   Interview[]
   createdAt    DateTime @default(now())
+
+  @@index([positionId])
 }
 
 model Interview {
@@ -50,6 +52,10 @@ model Interview {
   candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   position      Position  @relation(fields: [positionId], references: [id])
   createdAt     DateTime  @default(now())
+
+  @@index([candidateId])
+  @@index([positionId])
+  @@index([status])
 }
 
 model CompanyDoc {

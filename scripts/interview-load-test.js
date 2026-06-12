@@ -20,7 +20,7 @@
 //   CONCURRENT=20 node scripts/interview-load-test.js run
 // =============================================================================
 
-var BASE_URL = process.env.BASE_URL || 'http://localhost:3000/api';
+var BASE_URL = process.env.BASE_URL || 'http://localhost:3100/api';
 var CONCURRENT = parseInt(process.env.CONCURRENT || '10', 10);
 var LLM_REAL = process.env.LLM_REAL === 'true';
 var REQUIRE_FRESH = process.env.FRESH !== 'false'; // 默认每次 run 前重新 prepare

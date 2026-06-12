@@ -33,4 +33,10 @@ export class CandidateController {
 
   @Delete(':id')
   remove(@Param('id') id: string) { return this.candidateService.remove(id); }
+
+  @Post('batch-delete')
+  batchRemove(@Body('ids') ids: string[]) {
+    if (!Array.isArray(ids) || ids.length === 0) throw new BadRequestException('ids 不能为空');
+    return this.candidateService.batchRemove(ids);
+  }
 }

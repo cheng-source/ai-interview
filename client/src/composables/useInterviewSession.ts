@@ -1,7 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
-import { interviewsApi } from "../../api/client";
-import { useInterviewStore } from "../../stores/interview";
-import { buildRestoredInterview } from "./restore";
+import { interviewApi } from "@/api";
+import { useInterviewStore } from "@/stores/interview";
+import { buildRestoredInterview } from "@/utils/restore";
 
 export function useInterviewSession(interviewId: string) {
   const store = useInterviewStore();
@@ -77,7 +77,7 @@ export function useInterviewSession(interviewId: string) {
   async function tryResume() {
     try {
       if (interviewToken) store.setInterviewToken(interviewToken);
-      const res = await interviewsApi.getState(interviewId, interviewToken);
+      const res = await interviewApi.getState(interviewId, interviewToken);
       const {
         state,
         status,

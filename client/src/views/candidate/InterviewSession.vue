@@ -27,7 +27,7 @@ import { useRoute } from "vue-router";
 import { proxyRefs } from "vue";
 import InterviewChatPanel from "./components/InterviewChatPanel.vue";
 import InterviewConfirmPanel from "./components/InterviewConfirmPanel.vue";
-import { useInterviewSession } from "./useInterviewSession";
+import { useInterviewSession } from "@/composables/useInterviewSession";
 
 const route = useRoute();
 const interviewId = route.params.interviewId as string;

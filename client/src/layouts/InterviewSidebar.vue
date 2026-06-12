@@ -111,7 +111,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useInterviewStore } from '../stores/interview';
+import { useInterviewStore } from '@/stores/interview';
 
 const store = useInterviewStore();
 const activeTab = ref<'status' | 'scorecard'>('status');

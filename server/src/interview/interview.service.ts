@@ -1,14 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { createInterviewGraph } from "../langgraph/interview.graph";
-import { MemorySaver } from "@langchain/langgraph";
-import Redis from "ioredis";
+import { RedisSaver } from "@langchain/langgraph-checkpoint-redis";
 import { randomBytes } from "node:crypto";
 import { safeEqualHex, sha256Hex } from "../auth/token.util";
 import {
   SseDeps,
-  saveStateToRedis,
-  loadStateFromRedis,
   streamStart,
   streamAnswer,
   streamInterview,
@@ -19,20 +16,22 @@ import {
 } from "./interview-sse";
 
 @Injectable()
-export class InterviewService {
+export class InterviewService implements OnModuleInit {
   private graph: any;
-  private checkpointer: MemorySaver;
-  private redis: Redis;
-  private deps: SseDeps;
+  private checkpointer!: RedisSaver;
+  private deps!: SseDeps;
 
-  constructor(private prisma: PrismaService) {
-    this.checkpointer = new MemorySaver();
-    this.graph = createInterviewGraph().compile({ checkpointer: this.checkpointer });
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || "127.0.0.1",
-      port: Number(process.env.REDIS_PORT) || 6379,
+  constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    const redisUrl = `redis://${process.env.REDIS_HOST || "127.0.0.1"}:${Number(process.env.REDIS_PORT) || 6379}`;
+    this.checkpointer = await RedisSaver.fromUrl(redisUrl, {
+      defaultTTL: 86400,  // 24 小时 TTL，自动清理
+      refreshOnRead: true, // 读取时刷新 TTL
     });
-    this.deps = { graph: this.graph, prisma: this.prisma, redis: this.redis };
+    this.graph = createInterviewGraph().compile({ checkpointer: this.checkpointer });
+    this.deps = { graph: this.graph, prisma: this.prisma };
+    console.log("[InterviewService] RedisSaver initialized, TTL=24h");
   }
 
   // ---- 面试 CRUD ----
@@ -89,7 +88,7 @@ export class InterviewService {
     return { interviewId: interview.id, accessToken, accessTokenExpiresAt: expiresAt };
   }
 
-  // ---- 状态查询 ----
+  // ---- 状态查询（RedisSaver 主存储 + DB stateJson 兜底）----
   async getInterviewState(interviewId: string) {
     const interview = await this.prisma.interview.findUnique({
       where: { id: interviewId },
@@ -99,21 +98,14 @@ export class InterviewService {
 
     const config = { configurable: { thread_id: interview.threadId } };
     let state = await this.graph.getState(config);
-    console.log('[getState] MemorySaver:', state?.values ? `answerHistory=${(state.values as any).answerHistory?.length}` : 'null');
 
-    if (!hasRestorableStateValues(state?.values)) {
-      const saved = await loadStateFromRedis(this.deps, interview.threadId);
-      console.log('[getState] Redis:', saved ? `answerHistory=${saved.answerHistory?.length}` : 'null');
-      if (hasRestorableStateValues(saved)) { await this.graph.updateState(config, saved as any); state = await this.graph.getState(config); }
-    }
-
-    // MemorySaver + Redis 都丢了，最后兜底 DB 里的 stateJson
+    // RedisSaver 兜底：检查是否丢数据，最后从 DB stateJson 恢复
     if (!hasRestorableStateValues(state?.values) && (interview as any).stateJson) {
       try {
         const json = typeof (interview as any).stateJson === 'string'
           ? JSON.parse((interview as any).stateJson)
           : (interview as any).stateJson;
-        console.log('[getState] DB stateJson:', json?.answerHistory?.length);
+        console.log('[getState] DB stateJson fallback:', json?.answerHistory?.length);
         await this.graph.updateState(config, json as any);
         state = await this.graph.getState(config);
       } catch {}

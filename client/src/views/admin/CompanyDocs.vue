@@ -68,8 +68,8 @@
 import { ref, onMounted } from 'vue';
 import { ElMessage, type UploadFile, type UploadInstance } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
-import { knowledgeApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { knowledgeApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const loading = ref(true);
 const uploading = ref(false);

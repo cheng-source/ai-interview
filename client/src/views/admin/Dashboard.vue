@@ -26,8 +26,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { interviewsApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { interviewApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const loading = ref(true);
 const stats = ref({ total: 0, inProgress: 0, completed: 0, pending: 0, abandoned: 0 });
@@ -35,7 +35,7 @@ const ABANDON_MINUTES = 30;
 
 onMounted(async () => {
   try {
-    const res = await interviewsApi.list();
+    const res = await interviewApi.list();
     const list = res.data;
     const now = Date.now();
     stats.value.total = list.length;

@@ -114,8 +114,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { llmProvidersApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { llmProviderApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -141,7 +141,7 @@ onMounted(loadProviders);
 async function loadProviders() {
   loading.value = true;
   try {
-    const res = await llmProvidersApi.list();
+    const res = await llmProviderApi.list();
     providers.value = res.data;
   } catch {
     ElMessage.error('加载 Provider 失败');
@@ -205,9 +205,9 @@ async function saveProvider() {
   };
   try {
     if (editingId.value) {
-      await llmProvidersApi.update(editingId.value, payload);
+      await llmProviderApi.update(editingId.value, payload);
     } else {
-      await llmProvidersApi.create(payload);
+      await llmProviderApi.create(payload);
     }
     dialogVisible.value = false;
     ElMessage.success('保存成功');
@@ -221,7 +221,7 @@ async function saveProvider() {
 
 async function setDefault(row: any) {
   try {
-    await llmProvidersApi.updateDefault(row.id);
+    await llmProviderApi.updateDefault(row.id);
     ElMessage.success(`已切换默认聊天模型：${row.model}`);
     await loadProviders();
   } catch {
@@ -231,7 +231,7 @@ async function setDefault(row: any) {
 
 async function setDefaultEmbedding(row: any) {
   try {
-    await llmProvidersApi.updateDefaultEmbedding(row.id);
+    await llmProviderApi.updateDefaultEmbedding(row.id);
     ElMessage.success(`已切换默认向量模型：${row.embeddingModel}`);
     await loadProviders();
   } catch (error: any) {
@@ -242,7 +242,7 @@ async function setDefaultEmbedding(row: any) {
 async function testProvider(row: any) {
   testingId.value = row.id;
   try {
-    const res = await llmProvidersApi.test(row.id);
+    const res = await llmProviderApi.test(row.id);
     if (res.data.success) {
       ElMessage.success(res.data.message || '连接成功');
     } else {
@@ -257,7 +257,7 @@ async function testProvider(row: any) {
 
 async function deleteProvider(row: any) {
   try {
-    await llmProvidersApi.delete(row.id);
+    await llmProviderApi.delete(row.id);
     ElMessage.success('删除成功');
     await loadProviders();
   } catch (error: any) {

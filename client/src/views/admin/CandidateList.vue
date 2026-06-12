@@ -1,7 +1,17 @@
 <template>
   <AdminLayout>
     <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold text-gray-800">候选人管理</h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-semibold text-gray-800">候选人管理</h2>
+        <el-button
+          v-if="selectedIds.length > 0"
+          type="danger"
+          size="small"
+          @click="handleBatchDelete"
+        >
+          删除选中 ({{ selectedIds.length }})
+        </el-button>
+      </div>
       <el-button type="primary" @click="openCreate">+ 邀请候选人</el-button>
     </div>
 
@@ -9,7 +19,8 @@
       链接已复制到剪贴板
     </div>
 
-    <el-table :data="candidates" empty-text="暂无数据">
+    <el-table :data="candidates" empty-text="暂无数据" @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="40" />
       <el-table-column prop="name" label="姓名" />
       <el-table-column prop="email" label="邮箱" />
       <el-table-column prop="phone" label="电话" width="130" />
@@ -87,13 +98,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
-import { candidatesApi, positionsApi, interviewsApi } from '../../api/client';
-import AdminLayout from '../../components/AdminLayout.vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { candidateApi, positionApi, interviewApi } from '../../api';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
 const candidates = ref<any[]>([]);
 const positions = ref<any[]>([]);
 const copiedId = ref('');
+const selectedIds = ref<string[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref('');
 const form = ref<Record<string, string>>({ name: '', email: '', phone: '', positionId: '' });
@@ -110,7 +122,7 @@ const selectedInterviewType = ref('technical');
 onMounted(async () => { await refresh(); });
 
 async function refresh() {
-  const [cRes, pRes] = await Promise.all([candidatesApi.list(), positionsApi.list()]);
+  const [cRes, pRes] = await Promise.all([candidateApi.list(), positionApi.list()]);
   positions.value = pRes.data;
   candidates.value = Array.isArray(cRes.data) ? cRes.data : (cRes.data?.data || []);
 }
@@ -142,15 +154,15 @@ async function handleSave() {
     let candidateId = editingId.value;
 
     if (editingId.value) {
-      await candidatesApi.update(editingId.value, payload);
+      await candidateApi.update(editingId.value, payload);
     } else {
-      const candidate = await candidatesApi.create(payload);
+      const candidate = await candidateApi.create(payload);
       candidateId = candidate.data.id;
     }
 
     if (resumeFile.value && candidateId) {
       uploading.value = true;
-      try { await candidatesApi.uploadResume(candidateId, resumeFile.value); } catch (e) { ElMessage.error('简历上传失败，请重试'); throw e; }
+      try { await candidateApi.uploadResume(candidateId, resumeFile.value); } catch (e) { ElMessage.error('简历上传失败，请重试'); throw e; }
       uploading.value = false;
     }
 
@@ -163,9 +175,35 @@ async function handleSave() {
   }
 }
 
+function onSelectionChange(rows: any[]) {
+  selectedIds.value = rows.map((r) => r.id);
+}
+
 async function handleDelete(id: string) {
-  await candidatesApi.delete(id);
-  await refresh();
+  try {
+    await candidateApi.delete(id);
+    ElMessage.success('删除成功');
+    await refresh();
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.message || '删除失败');
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedIds.value.length === 0) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selectedIds.value.length} 位候选人吗？该操作不可恢复。`,
+      '批量删除确认',
+      { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' },
+    );
+    await candidateApi.batchDelete(selectedIds.value);
+    ElMessage.success(`已删除 ${selectedIds.value.length} 位候选人`);
+    selectedIds.value = [];
+    await refresh();
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.message || '批量删除失败');
+  }
 }
 
 function createInterviewFor(c: any) {
@@ -176,7 +214,7 @@ function createInterviewFor(c: any) {
 
 async function confirmCreateInterview() {
   if (!interviewTypeTarget.value) return;
-  await interviewsApi.create({
+  await interviewApi.create({
     candidateId: interviewTypeTarget.value.id,
     positionId: interviewTypeTarget.value.positionId,
     interviewType: selectedInterviewType.value,
@@ -187,7 +225,7 @@ async function confirmCreateInterview() {
 }
 
 async function copyLink(id: string) {
-  const res = await interviewsApi.rotateAccessToken(id);
+  const res = await interviewApi.rotateAccessToken(id);
   await navigator.clipboard.writeText(`${BASE}/interview/${id}?token=${res.data.accessToken}`);
   copiedId.value = id;
   setTimeout(() => { copiedId.value = ''; }, 2000);

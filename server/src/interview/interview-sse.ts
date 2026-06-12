@@ -7,10 +7,8 @@ import {
 } from "../langgraph/llm";
 import { doParseResume } from "../langgraph/nodes/analyze-resume.node";
 import type { PrismaService } from "../prisma/prisma.service";
-import type Redis from "ioredis";
 import { Observable } from "rxjs";
 
-const STATE_TTL = 86400;
 const activeInterviewStreams = new Map<string, InterviewStreamContext>();
 const inFlightClientMessages = new Set<string>();
 const activeAnswerLocks = new Set<string>();
@@ -19,7 +17,6 @@ const activeAnswerLocks = new Set<string>();
 export interface SseDeps {
   graph: any;
   prisma: PrismaService;
-  redis: Redis;
 }
 
 export function registerActiveInterviewStream(
@@ -81,34 +78,6 @@ export function asyncIterableToObservable<T>(
       iterator.return?.();
     };
   });
-}
-
-/** Redis 状态备份 */
-export async function saveStateToRedis(deps: SseDeps, threadId: string) {
-  try {
-    const config = { configurable: { thread_id: threadId } };
-    const state = await deps.graph.getState(config);
-    if (hasRestorableStateValues(state?.values)) {
-      await deps.redis.set(
-        `interview:state:${threadId}`,
-        JSON.stringify(state.values),
-        "EX",
-        STATE_TTL,
-      );
-    }
-  } catch (e) {
-    console.error("Redis saveState failed:", (e as Error).message);
-  }
-}
-
-export async function loadStateFromRedis(deps: SseDeps, threadId: string) {
-  try {
-    const raw = await deps.redis.get(`interview:state:${threadId}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    console.error("Redis loadState failed:", (e as Error).message);
-    return null;
-  }
 }
 
 export function normalizeStateValues(values: any, next?: unknown): any {
@@ -287,7 +256,6 @@ export async function* streamStart(
             .catch(() => {});
         }
       } catch {}
-      await saveStateToRedis(deps, interview.threadId);
       clearStreamingContext();
       clearActiveInterviewStream(interviewId, queue);
       queue.done();
@@ -422,7 +390,6 @@ export async function* streamAnswer(
             .catch(() => {});
         }
       } catch {}
-      await saveStateToRedis(deps, interview.threadId);
       if (dedupeKey) inFlightClientMessages.delete(dedupeKey);
       activeAnswerLocks.delete(interviewId);
       clearStreamingContext();
@@ -450,7 +417,7 @@ export async function* streamInterview(
       return;
     }
 
-    // 恢复路径：仅返回当前阶段，前端通过 GET /state 做完整恢复
+    // 恢复路径：RedisSaver 直接返回当前阶段，前端通过 GET /state 做完整恢复
     const interview = await deps.prisma.interview.findUnique({
       where: { id: interviewId },
       include: { candidate: true, position: true },
@@ -458,15 +425,7 @@ export async function* streamInterview(
     if (!interview) throw new Error("Interview not found");
 
     const config = { configurable: { thread_id: interview.threadId } };
-    let state = await deps.graph.getState(config);
-
-    if (!hasRestorableStateValues(state?.values)) {
-      const saved = await loadStateFromRedis(deps, interview.threadId);
-      if (hasRestorableStateValues(saved)) {
-        await deps.graph.updateState(config, saved as any);
-        state = await deps.graph.getState(config);
-      }
-    }
+    const state = await deps.graph.getState(config);
 
     if (hasRestorableStateValues(state?.values)) {
       const values = normalizeStateValues(state.values, (state as any).next);

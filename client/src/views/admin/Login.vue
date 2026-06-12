@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { authApi } from "../../api/client";
+import { authApi } from "../../api";
 
 const router = useRouter();
 const route = useRoute();

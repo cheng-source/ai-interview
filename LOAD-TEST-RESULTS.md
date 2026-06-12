@@ -1,8 +1,8 @@
 # 压测结果
 
-**测试时间**: 2026-06-11  
+**测试时间**: 2026-06-12（重新实测）  
 **测试环境**: Windows 11, Node.js 22.17, NestJS 单进程  
-**后端地址**: http://localhost:3000/api  
+**后端地址**: http://localhost:3100/api  
 
 ---
 
@@ -35,50 +35,60 @@
 
 **脚本**: `scripts/interview-load-test.js`  
 **模式**: `LLM_MOCK=true`（跳过真实 LLM 调用，用假数据替代）  
-**流程**: POST /start → SSE 流推送 icebreaker → LangGraph 中断等待回答  
-**每并发**: 1 个候选人 + 1 个面试 + POST /start  
+**流程**: POST /start → SSE 流推送 icebreaker → parse_resume → tech_select → LangGraph 中断
 
-| 并发 | 成功率    | 首包 P50 | 首包 P95 | 破冰 P50 | 破冰 P95 | 整体 P95 |
-|------|-----------|----------|----------|----------|----------|----------|
-| 10   | 10/10     | 103ms    | 139ms    | 103ms    | 139ms    | 163ms    |
-| 20   | 20/20     | 141ms    | 238ms    | 141ms    | 238ms    | 281ms    |
-| 50   | 50/50     | 330ms    | 540ms    | 330ms    | 540ms    | 659ms    |
-| 100  | 100/100   | 487ms    | 801ms    | 487ms    | 801ms    | 1025ms   |
-| 200  | 200/200   | 969ms    | 1431ms   | 969ms    | 1431ms   | 1854ms   |
+| 并发 | 状态 | 建连 P50 | 建连 P95 | 整体 P50 | 整体 P95 |
+|------|------|----------|----------|----------|----------|
+| 10   | ✓    | 125ms    | 151ms    | 170ms    | 172ms    |
+| 20   | ✓    | 73ms     | 133ms    | 168ms    | 171ms    |
+| 50   | ✓    | 192ms    | 299ms    | 350ms    | 369ms    |
+| 100  | ✓    | 337ms    | 534ms    | 626ms    | 680ms    |
+| 200  | ✓    | 629ms    | 964ms    | 1186ms   | 1281ms   |
+
+> 全部并发档位零失败，100% 成功。
 
 ### 指标说明
 
-- **首包延迟**: 从发起 POST /start 到收到第一个 SSE 事件的时间
-- **破冰耗时**: 到 icebreaker 中断点（LangGraph 暂停等待回答）的时间
-- **整体耗时**: 到 SSE 流关闭的时间
+| 指标 | 含义 | 包含节点 |
+|------|------|----------|
+| **建连延迟** | POST /start → 首个 SSE 事件到达 | SSE 建连 + 同步事件入队 |
+| **整体耗时** | POST /start → SSE 流关闭（中断点） | SSE 建连 + collect_self_introduction（纯模板，无 LLM）+ checkpoint 写入 + Redis 备份 + DB 更新 |
+
+> ⚠️ 旧版报告中的"首包/破冰"实为同一指标（差 1-2ms），此处合并为"建连延迟"。
+> ⚠️ 第一段 graph.invoke 仅执行 collect_self_introduction 就 interrupt，analyze_resume / ask_technical_question 在后续 POST /message 时才执行。
 
 ### 瓶颈分析
 
-icebreaker 节点使用硬编码模板（不调 LLM），这 200 并发 P95=1.9s 完全是系统基础设施开销：
+200 并发 P95=1281ms 的耗时拆解（全部是系统基础设施，无 LLM 参与）：
 
 | 组件 | 操作 |
 |------|------|
-| LangGraph | 图初始化、状态创建、checkpoint 写入 |
+| LangGraph | 图初始化、状态创建、1 个模板节点（collect_self_introduction）、checkpoint 写入 |
 | Prisma | 更新 interview 记录（status/startedAt/stateJson） |
 | Redis | 状态备份（saveStateToRedis） |
-| SSE | 建立 HTTP 长连接、推送 4 个事件 |
+| SSE | HTTP 长连接建立、推送 2-4 个事件 |
 | Node.js | 单线程事件循环处理 200 个并发 Promise |
 
-### 与 REST API 对比
+### 与旧版对比
 
 ```
-                REST API (读接口)    面试流程 (icebreaker)
-               ─────────────────    ─────────────────────
-200 并发 P95:   14ms                 1854ms (130 倍)
-瓶颈:           数据库查询            LangGraph 初始化 + DB 写入 + Redis + SSE 建连
+              旧版 (6/11)  新版 (6/12)
+              ───────────  ───────────
+ 10 并发 P95:  163ms         172ms  （持平）
+ 20 并发 P95:  281ms         171ms  （39% ↓）
+ 50 并发 P95:  659ms         369ms  （44% ↓）
+100 并发 P95: 1025ms         680ms  （34% ↓）
+200 并发 P95: 1854ms        1281ms  （31% ↓）
 ```
+
+> 新版显著优于旧版，可能原因：代码优化（如 API 层拆分后的模块加载效率）、旧版端口不通导致的部分重试开销消除。
 
 ### 结论
 
-- **50 并发以内**: 体验流畅（P95 < 700ms）
-- **100 并发**: 可接受（P95 ~1s）
-- **200 并发**: 有感知延迟但零失败
-- **全部测试零失败**: LangGraph + SSE 架构在高并发下是稳定的
+- **50 并发以内**: 体验流畅（P95 < 370ms）
+- **100 并发**: 可接受（P95 ~680ms）
+- **200 并发**: 有感知延迟但零失败（P95 ~1.3s）
+- **全部测试零失败**: LangGraph + SSE 架构在高并发下稳定
 
 ---
 
@@ -86,11 +96,11 @@ icebreaker 节点使用硬编码模板（不调 LLM），这 200 并发 P95=1.9s
 
 | 层级 | 瓶颈点 | 当前表现 | 优化方向 |
 |------|--------|----------|----------|
-| Node.js | 单线程事件循环 | 1000 并发读/200 并发写 | PM2 cluster 多进程 |
+| Node.js | 单线程事件循环 | 200 并发面试 P95=1.3s | PM2 cluster 多进程 |
 | PostgreSQL | 连接池 | 未观测到瓶颈 | 连接池大小调优 |
 | Redis | 状态备份 | 未观测到瓶颈 | 无需优化 |
-| LangGraph | 图初始化 + checkpoint | 200 并发 P95=1.9s | 减少同步写入 |
-| LLM API | 未测试（Mock 模式） | — | 需真实 LLM 压测 |
+| LangGraph | 图初始化 + 模板节点 + checkpoint | 200 并发 P95=1.3s | 减少同步写入 |
+| LLM API | Mock 模式（未测试真实延迟） | — | 需真实 LLM 压测 |
 
 ---
 

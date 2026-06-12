@@ -73,11 +73,11 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import ChatBubble from "../../../components/ChatBubble.vue";
-import InterviewSidebar from "../../../components/InterviewSidebar.vue";
-import ProgressIndicator from "../../../components/ProgressIndicator.vue";
-import type { useInterviewStore } from "../../../stores/interview";
-import { formatElapsed } from "../format";
+import ChatBubble from "@/components/ChatBubble.vue";
+import InterviewSidebar from "@/layouts/InterviewSidebar.vue";
+import ProgressIndicator from "@/components/ProgressIndicator.vue";
+import type { useInterviewStore } from "@/stores/interview";
+import { formatElapsed } from "@/utils/format";
 
 const props = defineProps<{
   store: ReturnType<typeof useInterviewStore>;
