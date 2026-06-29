@@ -2,6 +2,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { executePersona } from "../personas/persona-executor";
 import { resumeParserPersona } from "../personas/resume-parser.persona";
 import { getOrStartResumeParse } from "../llm";
+import { securePromptData } from "../prompt-security";
 
 export async function doParseResume(
   resumeText: string,
@@ -10,13 +11,17 @@ export async function doParseResume(
   options?: { silent?: boolean },
 ) {
   const introHint = candidateIntro
-    ? `\n候选人自我介绍：${candidateIntro}\n请结合自我介绍交叉验证简历信息。`
+    ? `\n候选人自我介绍：\n${securePromptData("candidate_intro", candidateIntro)}\n请结合自我介绍交叉验证简历信息。`
     : "";
 
   const { response: result } = await executePersona(
     resumeParserPersona,
     new HumanMessage(
-      `简历内容：${resumeText}\n\n岗位JD：${jdText}${introHint}`,
+      `简历内容：
+${securePromptData("resume", resumeText)}
+
+岗位JD：
+${securePromptData("jd", jdText)}${introHint}`,
     ),
     options,
   );

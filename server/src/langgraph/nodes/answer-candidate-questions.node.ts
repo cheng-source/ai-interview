@@ -11,6 +11,10 @@ import {
   pushEvent,
 } from "../llm";
 import { candidateQaPersona } from "../personas/candidate-qa.persona";
+import {
+  ANTI_INJECTION_INSTRUCTION,
+  securePromptData,
+} from "../prompt-security";
 import { PrismaClient } from "@prisma/client";
 
 let cachedPrisma: PrismaClient | null = null;
@@ -56,9 +60,11 @@ async function rewriteQuery(question: string): Promise<string> {
 3. 输出必须是单行纯文本，不要 Markdown，不要解释
 4. 如果原问题已经足够具体，原样输出
 5. 如果存在对话历史，结合上下文理解用户的追问意图
+
+${ANTI_INJECTION_INSTRUCTION}
 `,
     ),
-    new HumanMessage(question),
+    new HumanMessage(securePromptData("candidate_question", question)),
   ]);
   console.log("🚀 ~ rewriteQuery ~ res:", res);
   const text = typeof res.content === "string" ? res.content : "";
@@ -157,13 +163,29 @@ export async function answerCandidateQuestionsNode(state: any): Promise<any> {
     : "";
   console.log("Candidate QA - Retrieved Knowledge:", knowledge);
   const systemPrompt = knowledge
-    ? `${candidateQaPersona.systemPrompt}\n\n以下是从公司知识库检索到的相关信息，请据此回答：\n${knowledge}\n\n这是第${qaCount}个问题，最多回答5个问题。`
-    : `${candidateQaPersona.systemPrompt}\n这是第${qaCount}个问题，最多回答5个问题。`;
+    ? `${candidateQaPersona.systemPrompt}
+
+${ANTI_INJECTION_INSTRUCTION}
+
+以下是从公司知识库检索到的相关信息，请据此回答：
+${securePromptData("knowledge_context", knowledge)}
+
+这是第${qaCount}个问题，最多回答5个问题。`
+    : `${candidateQaPersona.systemPrompt}
+
+${ANTI_INJECTION_INSTRUCTION}
+
+这是第${qaCount}个问题，最多回答5个问题。`;
 
   pushEvent({ type: "status", content: "正在生成回答..." });
   const response = await llm.invoke([
     new SystemMessage(systemPrompt),
-    new HumanMessage(candidateQuestion || "你好，我想了解一下..."),
+    new HumanMessage(
+      securePromptData(
+        "candidate_question",
+        candidateQuestion || "你好，我想了解一下...",
+      ),
+    ),
   ]);
 
   const content = typeof response.content === "string" ? response.content : "";

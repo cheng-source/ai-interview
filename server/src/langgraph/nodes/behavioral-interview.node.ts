@@ -5,6 +5,7 @@ import { executePersona } from '../personas/persona-executor';
 import { behavioralInterviewerPersona } from '../personas/behavioral-interviewer.persona';
 import { behavioralEvaluatorPersona } from '../personas/behavioral-evaluator.persona';
 import { behavioralFollowupPersona } from '../personas/behavioral-followup.persona';
+import { securePromptData } from '../prompt-security';
 
 const COMPETENCY_QUESTIONS: Record<string, string> = {
   communication: '沟通协作能力',
@@ -35,10 +36,14 @@ export async function askBehavioralQuestionNode(state: any): Promise<any> {
   };
 
   const { content } = await executePersona(persona, new HumanMessage(
-    `【岗位信息】${position.title} | ${position.department} | 级别: ${position.level || '未指定'}
-【岗位JD】${position.jdText}
-【候选人自我介绍】${state.candidateIntro || "暂无"}
-【考察能力】${competencyLabel}`,
+    `【岗位信息】
+${securePromptData("position", `${position.title} | ${position.department} | 级别: ${position.level || '未指定'}`)}
+【岗位JD】
+${securePromptData("jd", position.jdText)}
+【候选人自我介绍】
+${securePromptData("candidate_intro", state.candidateIntro || "暂无")}
+【考察能力】
+${securePromptData("competency", competencyLabel)}`,
   ));
 
   const fallbackText = `请分享一个体现你${competencyLabel}的具体事例`;
@@ -72,7 +77,11 @@ export async function evaluateBehavioralAnswerNode(state: any): Promise<any> {
   }
 
   const { response: evaluation } = await executePersona(behavioralEvaluatorPersona, new HumanMessage(
-    `题目: ${question.text}\n候选人回答: ${candidateAnswer}`,
+    `题目:
+${securePromptData("question", question.text)}
+
+候选人回答:
+${securePromptData("candidate_answer", candidateAnswer)}`,
   ));
 
   const scores = { ...state.scores };
@@ -98,7 +107,13 @@ export async function askBehavioralFollowUpNode(state: any): Promise<any> {
   const lastRecord = answerHistory[answerHistory.length - 1];
 
   const { content } = await executePersona(behavioralFollowupPersona, new HumanMessage(
-    `题目: ${lastRecord?.question?.text}\n回答: ${lastRecord?.answer}\n评价: 回答空洞，缺乏具体案例`,
+    `题目:
+${securePromptData("question", lastRecord?.question?.text)}
+
+回答:
+${securePromptData("candidate_answer", lastRecord?.answer)}
+
+评价: 回答空洞，缺乏具体案例`,
   ));
 
   const followUpText = content || '能举一个更具体的例子吗？';

@@ -1,5 +1,5 @@
 export { type PersonaDefinition, type OutputMode } from './persona.interface';
-export { executePersona, type PersonaResult } from './persona-executor';
+export { executePersona, type PersonaExecuteOptions, type PersonaResult } from './persona-executor';
 export { techInterviewerPersona, techConceptInterviewerPersona } from './tech-interviewer.persona';
 export { techEvaluatorPersona } from './tech-evaluator.persona';
 export { techFollowupPersona } from './tech-followup.persona';

@@ -10,6 +10,10 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/',
+      redirect: '/admin',
+    },
+    {
       path: '/interview/:interviewId',
       name: 'interview',
       component: () => import('../views/candidate/InterviewSession.vue'),

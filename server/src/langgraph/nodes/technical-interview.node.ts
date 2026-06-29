@@ -8,6 +8,7 @@ import {
 } from "../personas/tech-interviewer.persona";
 import { techEvaluatorPersona } from "../personas/tech-evaluator.persona";
 import { techFollowupPersona } from "../personas/tech-followup.persona";
+import { secureJsonData, securePromptData } from "../prompt-security";
 
 function difficultyToSeconds(difficulty: number): number {
   const map: Record<number, number> = {
@@ -47,12 +48,15 @@ export async function askTechnicalQuestionNode(state: any): Promise<any> {
     const { content } = await executePersona(
       techInterviewerPersona,
       new HumanMessage(
-        `【岗位信息】${position.title} | ${position.department} | 级别: ${position.level || "未指定"}
-【岗位JD】${position.jdText}
-【候选人项目】${project.name}（${project.summary}）
+        `【岗位信息】
+${securePromptData("position", `${position.title} | ${position.department} | 级别: ${position.level || "未指定"}`)}
+【岗位JD】
+${securePromptData("jd", position.jdText)}
+【候选人项目】
+${secureJsonData("candidate_project", project)}
 【主要工作】
-- ${highlights}
-${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
+${securePromptData("project_highlights", highlights)}
+${state.candidateIntro ? `【自我介绍】\n${securePromptData("candidate_intro", state.candidateIntro)}` : ""}`,
       ),
     );
 
@@ -92,12 +96,16 @@ ${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
   const { content } = await executePersona(
     techConceptInterviewerPersona,
     new HumanMessage(
-      `【岗位信息】${position.title} | ${position.department} | 级别: ${position.level || "未指定"}
-【岗位JD】${position.jdText}
-【候选人技能分类】${conceptTopic}
-【技能详情】${skills.flatMap((s: any) => s.items || [s]).join(", ")}
-${coveredTopics.length ? `【已覆盖话题】${coveredTopics.join("、")}，请避开这些话题` : ""}
-${state.candidateIntro ? `【自我介绍】${state.candidateIntro}` : ""}`,
+      `【岗位信息】
+${securePromptData("position", `${position.title} | ${position.department} | 级别: ${position.level || "未指定"}`)}
+【岗位JD】
+${securePromptData("jd", position.jdText)}
+【候选人技能分类】
+${securePromptData("skill_category", conceptTopic)}
+【技能详情】
+${secureJsonData("skills", skills)}
+${coveredTopics.length ? `【已覆盖话题】\n${secureJsonData("covered_topics", coveredTopics)}\n请避开这些话题` : ""}
+${state.candidateIntro ? `【自我介绍】\n${securePromptData("candidate_intro", state.candidateIntro)}` : ""}`,
     ),
   );
 
@@ -144,7 +152,11 @@ export async function evaluateTechnicalAnswerNode(state: any): Promise<any> {
 
   const { response: evaluation } = await executePersona(
     techEvaluatorPersona,
-    new HumanMessage(`题目: ${questionText}\n候选人回答: ${candidateAnswer}`),
+    new HumanMessage(`题目:
+${securePromptData("question", questionText)}
+
+候选人回答:
+${securePromptData("candidate_answer", candidateAnswer)}`),
   );
 
   const scores = { ...state.scores };
@@ -183,7 +195,14 @@ export async function askTechnicalFollowUpNode(state: any): Promise<any> {
   const { content } = await executePersona(
     followupPersona,
     new HumanMessage(
-      `原题: ${question.text}\n回答: ${lastAnswer}\n评估: ${JSON.stringify(lastEval)}`,
+      `原题:
+${securePromptData("question", question.text)}
+
+回答:
+${securePromptData("candidate_answer", lastAnswer)}
+
+评估:
+${secureJsonData("evaluation", lastEval)}`,
     ),
   );
 

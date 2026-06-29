@@ -2,6 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { pushEvent } from '../llm';
 import { executePersona } from '../personas/persona-executor';
 import { reportGeneratorPersona } from '../personas/report-generator.persona';
+import { secureJsonData, securePromptData } from '../prompt-security';
 
 export async function generateFinalReportNode(state: any): Promise<any> {
   const { candidate, position, answerHistory } = state;
@@ -15,10 +16,14 @@ export async function generateFinalReportNode(state: any): Promise<any> {
   }));
 
   const { response: report } = await executePersona(reportGeneratorPersona, new HumanMessage(
-    `候选人: ${candidate?.name || 'N/A'}
-岗位: ${position?.title || 'N/A'}
-技能: ${(candidate?.skills || []).flatMap((s: any) => s.items || [s]).join(', ')}
-面试历史: ${JSON.stringify(historySummary)}`,
+    `候选人:
+${securePromptData("candidate_name", candidate?.name || 'N/A')}
+岗位:
+${securePromptData("position_title", position?.title || 'N/A')}
+技能:
+${secureJsonData("candidate_skills", (candidate?.skills || []).flatMap((s: any) => s.items || [s]))}
+面试历史:
+${secureJsonData("answer_history_summary", historySummary)}`,
   ));
 
   const summaryMessage = `面试结束，以下是你本次面试的评估报告：
