@@ -6,7 +6,7 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? /^https?:\/\/localhost:\d+$/,
+    origin: process.env.CORS_ORIGIN ?? /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/,
     credentials: true,
   });
   // 注册全局管道 ValidationPipe  whitelist:自动删除 DTO 中不存在的字段。transform:自动类型转换

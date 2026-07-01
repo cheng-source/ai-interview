@@ -32,8 +32,61 @@ function parseQuestionMeta(text: string, fallbackTopic: string) {
   return { topic, difficulty, timeLimit };
 }
 
+function nonEmptyStrings(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+export function buildConceptQuestionContext(state: any, conceptIndex: number) {
+  const skills = Array.isArray(state.candidate?.skills)
+    ? state.candidate.skills
+    : [];
+  const skillTopics = skills
+    .map((skill: any) => skill?.category)
+    .filter(Boolean);
+  const positionTechStack = nonEmptyStrings(state.position?.techStack);
+  const parsedTopics = nonEmptyStrings(state.techRound?.topics);
+  const historyTopics = nonEmptyStrings(
+    (state.answerHistory || []).map((record: any) => record?.question?.topic),
+  );
+
+  const fallbackTopics = [
+    ...positionTechStack,
+    ...parsedTopics,
+    ...historyTopics,
+    "技术基础",
+  ];
+  const topics = skillTopics.length
+    ? skillTopics
+    : [...new Set(fallbackTopics)];
+  const conceptTopic = topics[conceptIndex] || topics[0] || "技术基础";
+
+  const skillsForPrompt = skills.length
+    ? skills
+    : [
+        {
+          category: conceptTopic,
+          items: [
+            ...new Set([
+              conceptTopic,
+              ...positionTechStack,
+              ...parsedTopics.filter((topic) => topic !== conceptTopic),
+            ]),
+          ].filter(Boolean),
+        },
+      ];
+
+  return {
+    conceptTopic,
+    skillsForPrompt,
+    usingFallbackSkills: skills.length === 0,
+  };
+}
+
 export async function askTechnicalQuestionNode(state: any): Promise<any> {
   const { techRound, position, candidate } = state;
+  console.log("🚀 ~ askTechnicalQuestionNode ~ state:", state);
+  pushEvent({ type: "stage", stage: "technical" });
   const projects = candidate.projects || [];
   const skills = candidate.skills || [];
   const askedCount = (techRound.questionsAsked || []).length;
@@ -44,6 +97,10 @@ export async function askTechnicalQuestionNode(state: any): Promise<any> {
   if (askedCount < maxProjectQuestions) {
     const project = projects[askedCount];
     const highlights = (project.highlights || []).join("\n- ");
+    pushEvent({
+      type: "status",
+      content: `正在生成项目题：${project.name || "项目经历"}...`,
+    });
 
     const { content } = await executePersona(
       techInterviewerPersona,
@@ -84,13 +141,19 @@ ${state.candidateIntro ? `【自我介绍】\n${securePromptData("candidate_intr
 
   // Phase 2: 技能基础
   const conceptIndex = askedCount - maxProjectQuestions;
-  const skillCats = skills.map((s: any) => s.category).filter(Boolean);
-  const conceptTopic = skillCats[conceptIndex] || "技术基础";
+  const { conceptTopic, skillsForPrompt, usingFallbackSkills } =
+    buildConceptQuestionContext(state, conceptIndex);
+  pushEvent({
+    type: "status",
+    content: `正在生成技术题：${conceptTopic}...`,
+  });
 
   // 汇总已覆盖的话题，避免重复出题
   const answerHistory = state.answerHistory || [];
   const coveredTopics = [
-    ...new Set(answerHistory.map((r: any) => r.question?.topic).filter(Boolean)),
+    ...new Set(
+      answerHistory.map((r: any) => r.question?.topic).filter(Boolean),
+    ),
   ];
 
   const { content } = await executePersona(
@@ -103,7 +166,8 @@ ${securePromptData("jd", position.jdText)}
 【候选人技能分类】
 ${securePromptData("skill_category", conceptTopic)}
 【技能详情】
-${secureJsonData("skills", skills)}
+${secureJsonData("skills", skillsForPrompt)}
+${usingFallbackSkills ? "【兜底说明】\n简历解析出的技能分类为空，请基于岗位技术栈、候选人项目经历、自我介绍和已回答内容继续出一道有效技术题。不要输出“技能为空/无法出题/请补充信息”等拒绝类话术。\n" : ""}
 ${coveredTopics.length ? `【已覆盖话题】\n${secureJsonData("covered_topics", coveredTopics)}\n请避开这些话题` : ""}
 ${state.candidateIntro ? `【自我介绍】\n${securePromptData("candidate_intro", state.candidateIntro)}` : ""}`,
     ),
@@ -132,6 +196,7 @@ ${state.candidateIntro ? `【自我介绍】\n${securePromptData("candidate_intr
 }
 
 export async function evaluateTechnicalAnswerNode(state: any): Promise<any> {
+  console.log("🚀 ~ evaluateTechnicalAnswerNode ~ state:", state);
   const question = state.techRound.currentQuestion;
   const candidateAnswer = state.candidateAnswer || "";
 
@@ -208,10 +273,14 @@ ${secureJsonData("evaluation", lastEval)}`,
 
   const followUpText = content || "请再详细说说...";
   // 从 LLM 输出中解析难度星级和 [time]，格式与技术出题节点一致
-  const starMatch = followUpText.match(/\*\*.+?\*\*\s*\(.+?\s*\|\s*难度:\s*(★+)/);
+  const starMatch = followUpText.match(
+    /\*\*.+?\*\*\s*\(.+?\s*\|\s*难度:\s*(★+)/,
+  );
   const difficulty = starMatch ? starMatch[1].length : question.difficulty;
   const timeMatch = followUpText.match(/\[time\]\s*(\d+)/);
-  const timeLimit = timeMatch ? parseInt(timeMatch[1]) : difficultyToSeconds(difficulty);
+  const timeLimit = timeMatch
+    ? parseInt(timeMatch[1])
+    : difficultyToSeconds(difficulty);
 
   return {
     currentStage: "technical",

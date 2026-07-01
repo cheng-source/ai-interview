@@ -1,6 +1,7 @@
 // ========== 共享基础 ==========
-export { api, getBaseURL, createSSERequest, readSSEStream } from './client';
-export type { SSERequestOptions, SSERequestResult, SSEHandlers } from './client';
+export { api, getBaseURL } from './http';
+export { createSSERequest, readSSEStream } from './sse';
+export type { SSERequestOptions, SSERequestResult, SSEHandlers } from './sse';
 
 // ========== 业务 API 模块 ==========
 export { authApi } from './auth';

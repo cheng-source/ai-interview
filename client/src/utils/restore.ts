@@ -23,12 +23,12 @@ interface RestoredInterview {
 }
 
 const stageLabelMap: Record<string, string> = {
-  icebreaker: "Intro",
-  technical: "Technical",
-  behavioral: "Behavioral",
-  qa: "Q&A",
-  candidate_qa: "Q&A",
-  done: "Done",
+  icebreaker: "自我介绍",
+  technical: "技术面",
+  behavioral: "行为面",
+  qa: "反问",
+  candidate_qa: "反问",
+  done: "完成",
 };
 
 function stageLabel(stage: string): string {
@@ -54,6 +54,19 @@ function isSameContent(a?: string, b?: string): boolean {
   return !!a && !!b && a.trim() === b.trim();
 }
 
+function pushUniqueMessage(messages: RestoredMessage[], message: RestoredMessage) {
+  const last = messages[messages.length - 1];
+  if (
+    last &&
+    last.role === message.role &&
+    last.stage === message.stage &&
+    isSameContent(last.content, message.content)
+  ) {
+    return;
+  }
+  messages.push(message);
+}
+
 function parseQuestionSeconds(messages: RestoredMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const match = messages[i].content.match(/\[time\]\s*(\d+)/);
@@ -73,12 +86,12 @@ function inferPendingQuestion(state: any): { text: string; stage: string } | nul
     return { text: state.behavioralRound.currentQuestion.text, stage: "behavioral" };
   }
 
-  if ((currentStage === "qa" || currentStage === "candidate_qa") && !state?.candidateAnswer?.trim()) {
+    if ((currentStage === "qa" || currentStage === "candidate_qa") && !state?.candidateAnswer?.trim()) {
     return {
       text:
         (state?.qaCount || 0) === 0
-          ? "The interview section is complete. This is the candidate Q&A section. What would you like to know about the company, team, benefits, or career growth?"
-          : "Do you have anything else you would like to know?",
+          ? "面试环节已结束，现在是反问环节。你对公司有什么想了解的吗？可以问我关于技术栈、团队架构、企业文化、福利制度、职业发展等方面的问题。"
+          : "还有其他想了解的吗？",
       stage: "candidate_qa",
     };
   }
@@ -102,11 +115,11 @@ function buildMessagesAndEvaluations(state: any, includePendingQuestion: boolean
     const isCandidateQA = record.stage === "candidate_qa" || record.stage === "qa";
 
     if (record.question?.text) {
-      messages.push(makeMessage(isCandidateQA ? "candidate" : "interviewer", record.question.text, record.stage || ""));
+      pushUniqueMessage(messages, makeMessage(isCandidateQA ? "candidate" : "interviewer", record.question.text, record.stage || ""));
     }
 
     if (record.answer) {
-      messages.push(makeMessage(isCandidateQA ? "interviewer" : "candidate", record.answer, record.stage || ""));
+      pushUniqueMessage(messages, makeMessage(isCandidateQA ? "interviewer" : "candidate", record.answer, record.stage || ""));
     }
 
     if (record.evaluation) {
@@ -182,7 +195,7 @@ export function buildRestoredInterview(input: BuildRestoreInput): RestoredInterv
     messages,
     evaluations,
     stageLog: buildStageLog(state),
-    report: state?.finalReport || null,
+    report: state?.finalReport || state?.reportText || null,
     totalElapsed: elapsedFromStartedAt(startedAt, now),
     questionSeconds: parseQuestionSeconds(messages),
   };

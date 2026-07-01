@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   clearRuntimeProviderSnapshotForTest,
+  getEnabledChatProviderIds,
   resolveChatProviderConfig,
   setRuntimeProviderSnapshot,
 } from "../src/langgraph/llm";
@@ -19,6 +20,8 @@ async function main() {
     model: "env-model",
     apiKey: "env-key",
     baseURL: "https://env.example/v1",
+    protocol: "openai-compatible",
+    capabilities: null,
     temperature: undefined,
   });
 
@@ -41,8 +44,19 @@ async function main() {
         model: "disabled-model",
         enabled: false,
       },
+      {
+        id: "dashscope-embedding",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        apiKey: "embedding-key",
+        model: "text-embedding-v3",
+        embeddingModel: "text-embedding-v3",
+        supportsEmbedding: true,
+        enabled: true,
+      },
     ],
   });
+
+  assert.deepEqual(getEnabledChatProviderIds(), ["deepseek"]);
 
   assert.equal(resolveChatProviderConfig().baseURL, "https://api.deepseek.com/v1");
 
@@ -50,6 +64,8 @@ async function main() {
     model: "deepseek-v4-pro",
     apiKey: "db-key",
     baseURL: "https://api.deepseek.com/v1",
+    protocol: "openai-compatible",
+    capabilities: undefined,
     temperature: 0.2,
   });
 
@@ -57,6 +73,8 @@ async function main() {
     model: "deepseek-v4-pro",
     apiKey: "db-key",
     baseURL: "https://api.deepseek.com/v1",
+    protocol: "openai-compatible",
+    capabilities: undefined,
     temperature: 0.2,
   });
 

@@ -18,6 +18,7 @@
     :ref="session.registerChatPanel"
     :store="session.store"
     :sending="session.sending"
+    :inputDisabled="session.loading || session.sending"
     @send="session.sendAnswer"
   />
 </template>
@@ -27,7 +28,7 @@ import { useRoute } from "vue-router";
 import { proxyRefs } from "vue";
 import InterviewChatPanel from "./components/InterviewChatPanel.vue";
 import InterviewConfirmPanel from "./components/InterviewConfirmPanel.vue";
-import { useInterviewSession } from "@/composables/useInterviewSession";
+import { useInterviewSession } from "./useInterviewSession";
 
 const route = useRoute();
 const interviewId = route.params.interviewId as string;

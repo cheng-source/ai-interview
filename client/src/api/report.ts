@@ -10,7 +10,7 @@ export interface ReportDto {
 }
 
 // ========== 2. reportApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const reportApi = {
   list: () => api.get<ReportDto[]>('/reports'),

@@ -34,7 +34,7 @@ export interface ResumeParseResult {
 }
 
 // ========== 2. candidateApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const candidateApi = {
   list: () => api.get<CandidateDto[]>('/candidates'),

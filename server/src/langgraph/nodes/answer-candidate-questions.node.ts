@@ -1,16 +1,14 @@
 import {
   HumanMessage,
-  SystemMessage,
 } from "@langchain/core/messages";
 import { interrupt } from "@langchain/langgraph";
 import {
-  createLLM,
   createEmbeddings,
-  setCallType,
   rerank,
   pushEvent,
 } from "../llm";
 import { candidateQaPersona } from "../personas/candidate-qa.persona";
+import { executePersona } from "../personas/persona-executor";
 import {
   ANTI_INJECTION_INSTRUCTION,
   securePromptData,
@@ -49,10 +47,11 @@ export function isCandidateQaDoneIntent(text: string): boolean {
 }
 
 async function rewriteQuery(question: string): Promise<string> {
-  const rewriteLLM = createLLM({ temperature: 0, streaming: false });
-  const res = await rewriteLLM.invoke([
-    new SystemMessage(
-      `你是一个检索查询改写助手。你的任务是把用户原始问题改写成更适合知识库检索的单句查询。
+  const { content } = await executePersona(
+    {
+      id: "knowledge-query-rewriter",
+      name: "检索查询改写",
+      systemPrompt: `你是一个检索查询改写助手。你的任务是把用户原始问题改写成更适合知识库检索的单句查询。
 
 要求：
 1. 保留用户核心意图，不引入原问题没有的事实
@@ -61,14 +60,15 @@ async function rewriteQuery(question: string): Promise<string> {
 4. 如果原问题已经足够具体，原样输出
 5. 如果存在对话历史，结合上下文理解用户的追问意图
 
-${ANTI_INJECTION_INSTRUCTION}
-`,
-    ),
+${ANTI_INJECTION_INSTRUCTION}`,
+      temperature: 0,
+      streaming: false,
+      outputMode: "text",
+    },
     new HumanMessage(securePromptData("candidate_question", question)),
-  ]);
-  console.log("🚀 ~ rewriteQuery ~ res:", res);
-  const text = typeof res.content === "string" ? res.content : "";
-  return text.trim() || question;
+    { silent: true },
+  );
+  return content.trim() || question;
 }
 
 async function vectorSearchKnowledge(
@@ -149,12 +149,6 @@ export async function answerCandidateQuestionsNode(state: any): Promise<any> {
     return { currentStage: "candidate_qa" };
   }
 
-  setCallType("text");
-  const llm = createLLM({
-    temperature: candidateQaPersona.temperature,
-    streaming: candidateQaPersona.streaming,
-  });
-
   // 向量语义检索，优先按岗位部门过滤知识库
   const category = state.position?.department || undefined;
   pushEvent({ type: "status", content: "正在检索知识库..." });
@@ -178,17 +172,18 @@ ${ANTI_INJECTION_INSTRUCTION}
 这是第${qaCount}个问题，最多回答5个问题。`;
 
   pushEvent({ type: "status", content: "正在生成回答..." });
-  const response = await llm.invoke([
-    new SystemMessage(systemPrompt),
+  const { content } = await executePersona(
+    {
+      ...candidateQaPersona,
+      systemPrompt,
+    },
     new HumanMessage(
       securePromptData(
         "candidate_question",
         candidateQuestion || "你好，我想了解一下...",
       ),
     ),
-  ]);
-
-  const content = typeof response.content === "string" ? response.content : "";
+  );
 
   return {
     answerHistory: [

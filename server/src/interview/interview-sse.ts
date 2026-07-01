@@ -128,6 +128,72 @@ export function normalizeStateValues(values: any, next?: unknown): any {
   return normalized;
 }
 
+export function isTerminalInterviewState(values: any): boolean {
+  return (
+    values?.currentStage === "done" ||
+    !!values?.reportText ||
+    !!values?.finalReport
+  );
+}
+
+function parseStateJson(value: unknown): any {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
+function shouldRestoreCheckpointFromDb(values: any, dbState: any): boolean {
+  if (!dbState) return false;
+  if (!hasRestorableStateValues(values)) return true;
+  if (!values?.resumeText && dbState?.resumeText) return true;
+  if (!values?.position?.title && dbState?.position?.title) return true;
+  if (
+    !values?.techRound?.currentQuestion?.text &&
+    dbState?.techRound?.currentQuestion?.text
+  ) {
+    return true;
+  }
+  if (
+    !Array.isArray(values?.answerHistory) ||
+    values.answerHistory.length < (dbState?.answerHistory?.length || 0)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function getStateWithDbFallback(
+  deps: SseDeps,
+  config: any,
+  interview: any,
+) {
+  let state = await deps.graph.getState(config);
+  let stateConfig = (state as any)?.config || config;
+  const dbState = parseStateJson(interview.stateJson);
+
+  if (shouldRestoreCheckpointFromDb(state?.values, dbState)) {
+    console.warn("[streamAnswer] restoring checkpoint from DB stateJson", {
+      threadId: interview.threadId,
+      checkpointStage: state?.values?.currentStage,
+      checkpointHistory: state?.values?.answerHistory?.length,
+      dbStage: dbState?.currentStage,
+      dbHistory: dbState?.answerHistory?.length,
+    });
+    const restoredConfig = await deps.graph.updateState(stateConfig, dbState);
+    state = await deps.graph.getState(restoredConfig);
+    stateConfig = (state as any)?.config || restoredConfig;
+    return { state, config: stateConfig };
+  }
+
+  return { state, config: stateConfig };
+}
+
 /** 后台异步解析简历（共享 Promise，仅预热 LLM 调用，结果由 analyzeResumeNode 写入 graph state） */
 async function parseResumeAsync(
   deps: SseDeps,
@@ -282,11 +348,13 @@ export async function* streamAnswer(
     .update({ where: { id: interviewId }, data: { lastActiveAt: new Date() } })
     .catch(() => {});
 
-  const config = { configurable: { thread_id: interview.threadId } };
+  let config = { configurable: { thread_id: interview.threadId } };
   const dedupeKey = clientMessageId ? `${interviewId}:${clientMessageId}` : "";
 
   if (clientMessageId) {
-    const state = await deps.graph.getState(config);
+    const result = await getStateWithDbFallback(deps, config, interview);
+    const state = result.state;
+    config = result.config;
     const processed = Array.isArray(state?.values?.processedClientMessageIds)
       ? state.values.processedClientMessageIds
       : [];
@@ -306,7 +374,9 @@ export async function* streamAnswer(
   }
 
   if (activeAnswerLocks.has(interviewId)) {
-    const state = await deps.graph.getState(config);
+    const result = await getStateWithDbFallback(deps, config, interview);
+    const state = result.state;
+    config = result.config;
     yield {
       type: "llm_warning",
       code: "ANSWER_IN_PROGRESS",
@@ -326,7 +396,9 @@ export async function* streamAnswer(
 
   const graphTask = runWithStreamingContext(queue, async () => {
     try {
-      const state = await deps.graph.getState(config);
+      const result = await getStateWithDbFallback(deps, config, interview);
+      const state = result.state;
+      config = result.config;
       console.log("[streamAnswer] state.next:", (state as any)?.next);
       console.log("[streamAnswer] currentStage:", state?.values?.currentStage);
       console.log("[streamAnswer] tasks:", (state as any)?.tasks);
@@ -342,7 +414,7 @@ export async function* streamAnswer(
         ? { candidateAnswer: userMessage, processedClientMessageIds }
         : { candidateAnswer: userMessage };
       try {
-        await deps.graph.updateState(config, stateUpdate);
+        config = await deps.graph.updateState(config, stateUpdate);
       } catch (e: any) {
         const nextNodes = Array.isArray((state as any)?.next)
           ? ((state as any).next as string[])
@@ -358,7 +430,7 @@ export async function* streamAnswer(
           String(e?.message || e).includes("Ambiguous update") &&
           isWaitingForCandidateQuestion
         ) {
-          await deps.graph.updateState(
+          config = await deps.graph.updateState(
             config,
             stateUpdate,
             "answer_candidate_questions",
@@ -368,11 +440,6 @@ export async function* streamAnswer(
         }
       }
       await deps.graph.invoke(null, config);
-      // invoke 正常返回 → 图到达 END（面试完成）
-      await deps.prisma.interview.update({
-        where: { id: interviewId },
-        data: { status: "completed", endedAt: new Date() },
-      });
     } catch (e: any) {
       const isInterrupt =
         e?.name === "GraphInterrupt" ||
@@ -381,13 +448,38 @@ export async function* streamAnswer(
     } finally {
       try {
         const state = await deps.graph.getState(config);
+        const values = state?.values as any;
+        const isDone = isTerminalInterviewState(values);
+        const dbState = parseStateJson(interview.stateJson);
         if (state?.values) {
-          await deps.prisma.interview
-            .update({
-              where: { id: interviewId },
-              data: { stateJson: state.values as any },
-            })
-            .catch(() => {});
+          const currentLooksStale = shouldRestoreCheckpointFromDb(values, dbState);
+          if (currentLooksStale) {
+            console.warn("[streamAnswer] skip persisting stale checkpoint", {
+              threadId: interview.threadId,
+              checkpointStage: values?.currentStage,
+              checkpointHistory: values?.answerHistory?.length,
+              dbStage: dbState?.currentStage,
+              dbHistory: dbState?.answerHistory?.length,
+            });
+            await deps.prisma.interview
+              .update({
+                where: { id: interviewId },
+                data: { status: "in_progress", lastActiveAt: new Date() },
+              })
+              .catch(() => {});
+          } else {
+            await deps.prisma.interview
+              .update({
+                where: { id: interviewId },
+                data: {
+                  stateJson: values,
+                  status: isDone ? "completed" : "in_progress",
+                  endedAt: isDone ? new Date() : null,
+                  lastActiveAt: new Date(),
+                },
+              })
+              .catch(() => {});
+          }
         }
       } catch {}
       if (dedupeKey) inFlightClientMessages.delete(dedupeKey);

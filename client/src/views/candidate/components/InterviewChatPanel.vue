@@ -18,13 +18,6 @@
             :key="msg.id"
             :message="msg"
           />
-          <div
-            v-if="store.statusText"
-            class="flex items-center gap-2 max-w-[80%] px-4 py-2.5 rounded-xl mb-3 self-start bg-gray-100 border border-gray-200 text-gray-500 text-[13px]"
-          >
-            <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            AI 正在思考中...
-          </div>
           <div v-if="store.currentStage === 'done'" class="text-center py-5 text-green-500 text-base mt-6">
             面试完成
           </div>
@@ -41,7 +34,7 @@
               v-model="draft"
               placeholder="描述你的思路... (Enter 发送，Shift+Enter 换行)"
               class="flex-1 p-2.5 rounded-lg border border-gray-300 bg-white text-gray-800 outline-none resize-none text-sm leading-relaxed min-h-11 max-h-[30vh] focus:border-blue-400 overflow-y-auto"
-              :disabled="sending"
+              :disabled="inputDisabled"
               @keydown.enter.exact.prevent="submit"
               @input="autoResize"
             />
@@ -58,10 +51,10 @@
           <el-button
             type="primary"
             native-type="submit"
-            :disabled="!draft.trim() || sending"
+            :disabled="!draft.trim() || inputDisabled"
             :loading="sending"
           >
-            {{ sending ? "发送中..." : "发送" }}
+            {{ sending ? "AI处理中..." : "发送" }}
           </el-button>
         </form>
       </div>
@@ -82,6 +75,7 @@ import { formatElapsed } from "@/utils/format";
 const props = defineProps<{
   store: ReturnType<typeof useInterviewStore>;
   sending: boolean;
+  inputDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -105,7 +99,7 @@ function scrollToBottom() {
 
 async function submit() {
   const text = draft.value.trim();
-  if (!text || props.sending) return;
+  if (!text || props.inputDisabled) return;
   draft.value = "";
   autoResize();
   emit("send", text);

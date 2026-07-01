@@ -120,7 +120,7 @@ const now = new Date("2026-06-06T10:00:00Z").getTime();
   assert.equal(restored.started, true);
   assert.equal(restored.currentStage, "candidate_qa");
   assert.equal(restored.messages.at(-1)?.role, "interviewer");
-  assert.match(restored.messages.at(-1)?.content || "", /candidate Q&A section/);
+  assert.match(restored.messages.at(-1)?.content || "", /反问环节/);
 }
 
 {

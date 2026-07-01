@@ -39,7 +39,7 @@ export interface DefaultEmbeddingProviderInput {
 }
 
 // ========== 2. llmProviderApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const llmProviderApi = {
   list: () => api.get<LlmProviderDto[]>('/llm-providers'),

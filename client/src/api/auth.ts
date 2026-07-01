@@ -10,7 +10,7 @@ export interface LoginResult {
 }
 
 // ========== 2. authApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const authApi = {
   login: (data: LoginInput) =>

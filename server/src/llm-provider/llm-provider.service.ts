@@ -29,12 +29,14 @@ export class LlmProviderService implements OnModuleInit {
 
     return providers.map((provider) => ({
       id: provider.id,
+      protocol: provider.protocol,
       baseUrl: provider.baseUrl,
       maskedApiKey: this.crypto.mask(this.crypto.decrypt({
         nonce: provider.apiKeyNonce,
         ciphertext: provider.apiKeyCiphertext,
       })),
       model: provider.model,
+      capabilities: this.normalizeCapabilities(provider.capabilities),
       embeddingModel: provider.embeddingModel,
       embeddingDimensions: provider.embeddingDimensions,
       supportsEmbedding: provider.supportsEmbedding,
@@ -54,10 +56,12 @@ export class LlmProviderService implements OnModuleInit {
     await this.prisma.llmProvider.create({
       data: {
         id,
+        protocol: this.normalizeProtocol(data.protocol),
         baseUrl: this.requireText(data.baseUrl, "baseUrl"),
         apiKeyNonce: encrypted.nonce,
         apiKeyCiphertext: encrypted.ciphertext,
         model: this.requireText(data.model, "model"),
+        capabilities: this.normalizeCapabilities(data.capabilities),
         embeddingModel: this.optionalText(data.embeddingModel),
         embeddingDimensions: data.embeddingDimensions ?? null,
         supportsEmbedding: data.supportsEmbedding ?? !!this.optionalText(data.embeddingModel),
@@ -78,8 +82,10 @@ export class LlmProviderService implements OnModuleInit {
     await this.prisma.llmProvider.update({
       where: { id },
       data: {
+        ...(data.protocol !== undefined ? { protocol: this.normalizeProtocol(data.protocol) } : {}),
         ...(data.baseUrl !== undefined ? { baseUrl: this.requireText(data.baseUrl, "baseUrl") } : {}),
         ...(data.model !== undefined ? { model: this.requireText(data.model, "model") } : {}),
+        ...(data.capabilities !== undefined ? { capabilities: this.normalizeCapabilities(data.capabilities) } : {}),
         ...(data.embeddingModel !== undefined ? { embeddingModel: this.optionalText(data.embeddingModel) } : {}),
         ...(data.embeddingDimensions !== undefined ? { embeddingDimensions: data.embeddingDimensions } : {}),
         ...(data.supportsEmbedding !== undefined ? { supportsEmbedding: data.supportsEmbedding } : {}),
@@ -189,12 +195,14 @@ export class LlmProviderService implements OnModuleInit {
       defaultEmbeddingProviderId: setting.defaultEmbeddingProviderId || setting.defaultChatProviderId,
       providers: providers.map((provider): RuntimeProviderConfig => ({
         id: provider.id,
+        protocol: this.normalizeProtocol(provider.protocol),
         baseUrl: provider.baseUrl,
         apiKey: this.crypto.decrypt({
           nonce: provider.apiKeyNonce,
           ciphertext: provider.apiKeyCiphertext,
         }),
         model: provider.model,
+        capabilities: this.normalizeCapabilities(provider.capabilities),
         embeddingModel: provider.embeddingModel,
         embeddingDimensions: provider.embeddingDimensions,
         supportsEmbedding: provider.supportsEmbedding,
@@ -211,10 +219,12 @@ export class LlmProviderService implements OnModuleInit {
     await this.prisma.llmProvider.create({
       data: {
         id,
+        protocol: "openai-compatible",
         baseUrl: process.env.OPENAI_BASE_URL || "https://api.deepseek.com/v1",
         apiKeyNonce: encrypted.nonce,
         apiKeyCiphertext: encrypted.ciphertext,
         model: process.env.LLM_MODEL || "deepseek-v4-pro",
+        capabilities: this.defaultChatCapabilities(),
         temperature: this.optionalNumber(process.env.LLM_TEMPERATURE),
         supportsEmbedding: false,
         builtin: true,
@@ -228,10 +238,12 @@ export class LlmProviderService implements OnModuleInit {
       await this.prisma.llmProvider.create({
         data: {
           id: embeddingId,
+          protocol: "openai-compatible",
           baseUrl: process.env.EMBEDDING_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
           apiKeyNonce: embeddingEncrypted.nonce,
           apiKeyCiphertext: embeddingEncrypted.ciphertext,
           model: process.env.EMBEDDING_MODEL,
+          capabilities: this.defaultChatCapabilities(),
           embeddingModel: process.env.EMBEDDING_MODEL,
           embeddingDimensions: this.optionalNumber(process.env.EMBEDDING_DIMENSIONS),
           supportsEmbedding: true,
@@ -279,6 +291,34 @@ export class LlmProviderService implements OnModuleInit {
     if (typeof value !== "string" || !value.trim()) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeProtocol(value: unknown): "openai-compatible" {
+    if (value === undefined || value === null || value === "") {
+      return "openai-compatible";
+    }
+    if (value === "openai-compatible") {
+      return "openai-compatible";
+    }
+    throw new Error(`Unsupported provider protocol: ${String(value)}`);
+  }
+
+  private normalizeCapabilities(value: unknown): Record<string, boolean> | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const capabilities: Record<string, boolean> = {};
+    for (const [key, enabled] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof enabled === "boolean") capabilities[key] = enabled;
+    }
+    return Object.keys(capabilities).length ? capabilities : null;
+  }
+
+  private defaultChatCapabilities(): Record<string, boolean> {
+    return {
+      streaming: true,
+      jsonMode: false,
+      jsonSchema: false,
+      toolCalling: false,
+    };
   }
 
   private chatCompletionsUrl(baseUrl: string): string {

@@ -14,7 +14,7 @@ export interface CompanyDocCreateInput {
 }
 
 // ========== 2. knowledgeApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const knowledgeApi = {
   list: () => api.get<CompanyDocDto[]>('/knowledge'),

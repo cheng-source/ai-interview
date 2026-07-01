@@ -20,6 +20,7 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+.codex-logs/
 
 # Temp files
 temp/

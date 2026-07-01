@@ -2,6 +2,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { executePersona } from "../personas/persona-executor";
 import { resumeParserPersona } from "../personas/resume-parser.persona";
 import { getOrStartResumeParse } from "../llm";
+import { pushEvent } from "../llm";
 import { securePromptData } from "../prompt-security";
 
 export async function doParseResume(
@@ -31,7 +32,7 @@ ${securePromptData("jd", jdText)}${introHint}`,
   const projectTopics = projects.map((p: any) => p.name);
   const conceptTopics = skills.slice(0, 2).map((s: any) => s.category);
   const allTopics = [...projectTopics, ...conceptTopics];
-  console.log("🚀 ~ doParseResume ~ allTopics:", allTopics);
+  console.log("🚀 ~ doParseResume ~ result:", result);
 
   return {
     candidate: {
@@ -46,25 +47,33 @@ ${securePromptData("jd", jdText)}${introHint}`,
   };
 }
 
-export async function analyzeResumeNode(state: any): Promise<any> {
+export async function analyzeResumeNode(state: any, config?: any): Promise<any> {
   if (
     state.candidate?.skills?.length > 0 ||
     state.candidate?.projects?.length > 0
   ) {
+    pushEvent({ type: "stage", stage: "parse_resume" });
+    pushEvent({ type: "status", content: "简历已解析，正在准备面试题..." });
     return {};
   }
 
   const resumeText = (state as any).resumeText || "";
   const jdText = state.position?.jdText || "";
   const candidateIntro = (state as any).candidateIntro || "";
-  const threadId = (state as any).threadId || "";
+  // threadId 不在 InterviewStateAnnotation 里（state.threadId 恒为 undefined），
+  // 必须从 config.configurable.thread_id 取，才能和 streamStart 里 prewarm 用的 key 对上，
+  // 否则 prewarm 和节点会各发一次 LLM 调用（prewarm 的结果被浪费）。
+  const threadId = config?.configurable?.thread_id || (state as any).threadId || "";
 
   // 等待后台解析完成（共享 Promise，不会重复调 LLM）
+  pushEvent({ type: "stage", stage: "parse_resume" });
+  pushEvent({ type: "status", content: "正在解析简历..." });
   const result = await getOrStartResumeParse(threadId, () =>
     doParseResume(resumeText, jdText, candidateIntro),
   );
-
+  console.log("简历解析完成", result);
   if (result) {
+    pushEvent({ type: "status", content: "简历解析完成，正在生成面试题..." });
     return {
       candidate: result.candidate,
       techRound: {

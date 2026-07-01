@@ -83,10 +83,12 @@ model CompanyDocChunk {
 
 model LlmProvider {
   id                  String   @id
+  protocol            String   @default("openai-compatible")
   baseUrl             String
   apiKeyCiphertext    String
   apiKeyNonce         String
   model               String
+  capabilities        Json?
   embeddingModel      String?
   embeddingDimensions Int?
   supportsEmbedding   Boolean  @default(false)

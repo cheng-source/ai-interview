@@ -13,6 +13,17 @@ export function routeInTechnical(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
 
+  if (!lastRecord) {
+    // answerHistory 为空属于异常状态（正常至少有 icebreaker 记录），
+    // 多见于服务重启后从损坏的 checkpoint 恢复。这里兜底避免崩溃，继续推进流程。
+    console.warn("[routeInTechnical] empty answerHistory, techRound:", {
+      currentQuestion: !!state.techRound?.currentQuestion,
+      questionsAsked: state.techRound?.questionsAsked?.length,
+      candidateProjects: state.candidate?.projects?.length,
+    });
+    return "advance_technical_topic";
+  }
+
   const evaluation = lastRecord.evaluation || {};
   const depth = state.techRound?.depth || 0;
   const projects = state.candidate?.projects || [];
@@ -41,6 +52,14 @@ export function routeAfterTechNextTopic(state: any): string {
 export function routeInBehavioral(state: any): string {
   const answerHistory = state.answerHistory || [];
   const lastRecord = answerHistory[answerHistory.length - 1];
+
+  if (!lastRecord) {
+    console.warn("[routeInBehavioral] empty answerHistory, behavioralRound:", {
+      currentQuestion: !!state.behavioralRound?.currentQuestion,
+      questionsAsked: state.behavioralRound?.questionsAsked?.length,
+    });
+    return "advance_behavioral_competency";
+  }
 
   const evaluation = lastRecord.evaluation || {};
   const depth = state.behavioralRound?.depth || 0;

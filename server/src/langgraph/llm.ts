@@ -3,14 +3,20 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Observable, ReplaySubject } from "rxjs";
+import type {
+  ModelProviderCapabilities,
+  ModelProviderProtocol,
+} from "./models/model-types";
 
 type CallType = "text" | "structured" | "none";
 
 export interface RuntimeProviderConfig {
   id: string;
+  protocol?: ModelProviderProtocol;
   baseUrl: string;
   apiKey: string;
   model: string;
+  capabilities?: ModelProviderCapabilities | null;
   embeddingModel?: string | null;
   embeddingDimensions?: number | null;
   supportsEmbedding?: boolean;
@@ -28,6 +34,8 @@ interface ResolvedChatProviderConfig {
   model: string;
   apiKey: string | undefined;
   baseURL: string;
+  protocol: ModelProviderProtocol;
+  capabilities?: ModelProviderCapabilities | null;
   temperature?: number;
 }
 
@@ -176,11 +184,32 @@ function findRuntimeProvider(providerId?: string | null): RuntimeProviderConfig 
   ) || null;
 }
 
+export function getRuntimeChatProvider(providerId?: string | null): RuntimeProviderConfig | null {
+  return findRuntimeProvider(providerId);
+}
+
 export function getEnabledChatProviderIds(): string[] {
   if (!runtimeProviderSnapshot) return [];
-  return runtimeProviderSnapshot.providers
-    .filter((provider) => provider.enabled !== false && !!provider.apiKey && !!provider.model)
+  const enabledChatProviderIds = runtimeProviderSnapshot.providers
+    .filter((provider) => {
+      const embeddingOnly =
+        provider.supportsEmbedding &&
+        !!provider.embeddingModel &&
+        provider.embeddingModel === provider.model;
+      return (
+        provider.enabled !== false &&
+        !!provider.apiKey &&
+        !!provider.model &&
+        !embeddingOnly
+      );
+    })
     .map((provider) => provider.id);
+  return [
+    runtimeProviderSnapshot.defaultChatProviderId,
+    ...enabledChatProviderIds.filter(
+      (id) => id !== runtimeProviderSnapshot?.defaultChatProviderId,
+    ),
+  ].filter((id, index, ids) => !!id && ids.indexOf(id) === index);
 }
 
 function normalizeOpenAIBaseUrl(baseUrl: string): string {
@@ -200,6 +229,8 @@ export function resolveChatProviderConfig(providerId?: string | null): ResolvedC
       model: provider.model,
       apiKey: provider.apiKey,
       baseURL: normalizeOpenAIBaseUrl(provider.baseUrl),
+      protocol: provider.protocol || "openai-compatible",
+      capabilities: provider.capabilities,
       temperature: provider.temperature ?? undefined,
     };
   }
@@ -208,6 +239,8 @@ export function resolveChatProviderConfig(providerId?: string | null): ResolvedC
     model: process.env.LLM_MODEL || "deepseek-v4-pro",
     apiKey: process.env.OPENAI_API_KEY,
     baseURL: normalizeOpenAIBaseUrl(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"),
+    protocol: "openai-compatible",
+    capabilities: null,
     temperature: undefined,
   };
 }
@@ -234,7 +267,7 @@ export function createLLM(
   const provider = resolveChatProviderConfig(options.providerId);
   const temperature = options.temperature ?? provider.temperature ?? 0.5;
   const streaming = options.streaming ?? false;
-  const cacheKey = `${provider.model}::${temperature}::${streaming}`;
+  const cacheKey = `${options.providerId || "default"}::${provider.baseURL}::${provider.model}::${temperature}::${streaming}`;
 
   const cached = llmCache.get(cacheKey);
   if (cached) return cached;
@@ -336,11 +369,21 @@ export function getOrStartResumeParse(
 ): Promise<any> {
   const existing = resumeParseMap.get(threadId);
   if (existing) return existing;
-  const promise = fn().then((result) => {
-    // 完成后用 resolved promise 替换，后续调用者直接拿缓存，不会发起新 LLM 调用
-    resumeParseMap.set(threadId, Promise.resolve(result));
-    return result;
-  });
+  const promise = fn().then(
+    (result) => {
+      // 完成后用 resolved promise 替换，后续调用者直接拿缓存，不会发起新 LLM 调用
+      resumeParseMap.set(threadId, Promise.resolve(result));
+      return result;
+    },
+    (error) => {
+      // 失败时清除缓存，否则 rejecting promise 会黏在 map 里，
+      // 后续调用者 await 会直接抛错且永远无法重新发起解析。
+      if (resumeParseMap.get(threadId) === promise) {
+        resumeParseMap.delete(threadId);
+      }
+      throw error;
+    },
+  );
   resumeParseMap.set(threadId, promise);
   return promise;
 }

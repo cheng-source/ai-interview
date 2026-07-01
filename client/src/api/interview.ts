@@ -37,7 +37,8 @@ export interface InterviewState {
 }
 
 // ========== 2. interviewApi 命名空间对象 ==========
-import { api, createSSERequest, type SSERequestResult } from './client';
+import { api } from './http';
+import { createSSERequest, type SSERequestResult } from './sse';
 
 export const interviewApi = {
   // ---- REST（走 axios） ----

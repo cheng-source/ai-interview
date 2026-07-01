@@ -61,6 +61,12 @@ export const SSEEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
     personaId: z.string().optional(),
     attempt: z.number().optional(),
+    providerId: z.string().optional(),
+    model: z.string().optional(),
+    baseURL: z.string().optional(),
+    protocol: z.string().optional(),
+    outputMode: z.string().optional(),
+    failureKind: z.string().optional(),
   }),
 ]);
 export type SSEEvent = z.infer<typeof SSEEventSchema>;

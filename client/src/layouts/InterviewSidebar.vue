@@ -146,9 +146,11 @@ const tabs = [
 
 const stageMap: Record<string, string> = {
   icebreaker: '自我介绍',
+  parse_resume: '简历解析',
   technical: '技术面',
   behavioral: '行为面',
   qa: '反问',
+  candidate_qa: '反问',
   done: '完成',
 };
 
@@ -158,6 +160,7 @@ function stageLabel(stage: string): string {
 
 const allProgressStages = [
   { key: 'icebreaker', label: '破冰' },
+  { key: 'parse_resume', label: '简历' },
   { key: 'technical', label: '技术面' },
   { key: 'behavioral', label: '行为面' },
   { key: 'qa', label: '反问' },

@@ -20,7 +20,7 @@ export interface PositionCreateInput {
 export type PositionUpdateInput = Partial<PositionCreateInput>;
 
 // ========== 2. positionApi 命名空间对象 ==========
-import { api } from './client';
+import { api } from './http';
 
 export const positionApi = {
   list: () => api.get<PositionDto[]>('/positions'),

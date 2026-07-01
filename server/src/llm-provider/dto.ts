@@ -1,8 +1,10 @@
 export interface ProviderDto {
   id: string;
+  protocol: string;
   baseUrl: string;
   maskedApiKey: string;
   model: string;
+  capabilities?: Record<string, boolean> | null;
   embeddingModel?: string | null;
   embeddingDimensions?: number | null;
   supportsEmbedding: boolean;
@@ -15,9 +17,11 @@ export interface ProviderDto {
 
 export interface UpsertProviderDto {
   id?: string;
+  protocol?: string;
   baseUrl?: string;
   apiKey?: string;
   model?: string;
+  capabilities?: Record<string, boolean> | null;
   embeddingModel?: string | null;
   embeddingDimensions?: number | null;
   supportsEmbedding?: boolean;
